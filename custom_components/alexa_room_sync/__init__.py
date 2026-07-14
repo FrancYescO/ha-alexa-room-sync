@@ -23,6 +23,7 @@ from .const import (
     DOMAIN,
     EVENT_SYNC_FINISHED,
     SERVICE_APPLY,
+    SERVICE_CAPABILITIES,
     SERVICE_PREVIEW,
 )
 from .runtime import AlexaRoomSyncRuntime, parse_string_list, parse_string_mapping
@@ -77,6 +78,22 @@ async def async_setup_entry(
         hass.bus.async_fire(EVENT_SYNC_FINISHED, result)
         return result
 
+    async def _capabilities(call: ServiceCall) -> dict[str, Any]:
+        await _assert_admin(call)
+        try:
+            capabilities = await entry.runtime_data.api.async_group_capabilities()
+        except AlexaApiError as err:
+            raise HomeAssistantError(str(err)) from err
+        return capabilities
+
+    hass.services.async_register(
+        DOMAIN,
+        SERVICE_CAPABILITIES,
+        _capabilities,
+        schema=vol.Schema({}),
+        supports_response=SupportsResponse.ONLY,
+    )
+
     hass.services.async_register(
         DOMAIN,
         SERVICE_PREVIEW,
@@ -100,4 +117,5 @@ async def async_unload_entry(
     """Unload Alexa Room Sync."""
     hass.services.async_remove(DOMAIN, SERVICE_PREVIEW)
     hass.services.async_remove(DOMAIN, SERVICE_APPLY)
+    hass.services.async_remove(DOMAIN, SERVICE_CAPABILITIES)
     return True

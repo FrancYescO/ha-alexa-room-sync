@@ -45,16 +45,25 @@ class SyncPlan:
     ambiguous: list[dict[str, Any]] = field(default_factory=list)
     unmatched_alexa: list[dict[str, str]] = field(default_factory=list)
     missing_alexa_groups: list[str] = field(default_factory=list)
+    pending_additions: list[dict[str, str]] = field(default_factory=list)
     mapped_count: int = 0
 
     def as_dict(self) -> dict[str, Any]:
         """Return a JSON-safe representation."""
+        groups_to_create = sorted(set(self.missing_alexa_groups))
         return {
             "mapped_count": self.mapped_count,
             "additions": [asdict(item) for item in self.additions],
             "removals": [asdict(item) for item in self.removals],
             "ambiguous": self.ambiguous,
             "unmatched_alexa": self.unmatched_alexa,
-            "missing_alexa_groups": sorted(set(self.missing_alexa_groups)),
-            "change_count": len(self.additions) + len(self.removals),
+            "missing_alexa_groups": groups_to_create,
+            "groups_to_create": groups_to_create,
+            "pending_additions": self.pending_additions,
+            "change_count": (
+                len(groups_to_create)
+                + len(self.pending_additions)
+                + len(self.additions)
+                + len(self.removals)
+            ),
         }

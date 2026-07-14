@@ -11,7 +11,8 @@ Assistant Matter Hub.
 
 ## Protezioni incluse
 
-- Non crea, rinomina o elimina gruppi Alexa.
+- Crea soltanto i gruppi Alexa mancanti richiesti da associazioni univoche.
+- Non rinomina né elimina gruppi Alexa.
 - Gestisce solo gruppi il cui nome coincide con un'area Home Assistant.
 - Non modifica gruppi Alexa estranei alle aree HA.
 - Blocca nomi Alexa duplicati e mapping su più aree.
@@ -45,9 +46,9 @@ Nel flusso di configurazione inserisci:
   richiesta, inserisci come JSON soltanto gli header `x-amzn-*` presenti nella
   stessa richiesta. Non inserire `Cookie`, `Host`, `Content-Length`, `Accept`
   o `Content-Type`: vengono gestiti dal componente.
-- **Modelli endpoint**: lascia `["MatterHub"]`. Nel HAR sono presenti 16
-  endpoint con questo modello; il filtro impedisce di coinvolgere Echo e
-  dispositivi Alexa nativi. Aggiungi altri modelli solo dopo averli verificati.
+- **Modelli endpoint**: il valore resta disponibile per compatibilità. La
+  sincronizzazione considera tutti gli endpoint controllabili e scarta client
+  Alexa, app e hub; modifica soltanto quelli con un nome HA univoco.
 - **Mapping manuali**: inizialmente `{}`.
 
 Il cookie è una credenziale: non pubblicare il HAR e non allegarlo a issue o
@@ -69,7 +70,9 @@ La risposta contiene:
 - `ambiguous`: nomi duplicati o mapping non sicuri;
 - `unmatched_alexa`: endpoint Alexa senza corrispondenza HA;
 - `missing_alexa_groups`: aree HA prive di un gruppo Alexa omonimo;
-- `change_count`: totale delle modifiche previste.
+- `groups_to_create`: stanze che verranno create automaticamente;
+- `pending_additions`: endpoint che saranno aggiunti dopo la creazione stanza;
+- `change_count`: totale di creazioni e modifiche previste.
 
 Applica soltanto dopo aver controllato l'anteprima:
 

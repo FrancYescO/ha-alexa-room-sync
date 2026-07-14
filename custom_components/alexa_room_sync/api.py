@@ -57,6 +57,62 @@ mutation UpdateDeviceGroup($deviceGroupId: String!, $memberDeviceIds: [String!],
 }
 """
 
+CREATE_GROUP_MUTATION = """
+mutation CreateDeviceGroup($friendlyName: String!) {
+  createDeviceGroup(createDeviceGroupInput: {
+    friendlyName: $friendlyName
+  }) {
+    __typename
+  }
+}
+"""
+
+CAPABILITIES_QUERY = """
+query AlexaRoomSyncCapabilities {
+  __schema {
+    mutationType {
+      fields {
+        name
+        args {
+          name
+          type {
+            kind
+            name
+            ofType {
+              kind
+              name
+              ofType { kind name }
+            }
+          }
+        }
+      }
+    }
+  }
+  createDeviceGroupInput: __type(name: "CreateDeviceGroupInput") {
+    name
+    inputFields {
+      name
+      type {
+        kind
+        name
+        ofType {
+          kind
+          name
+          inputFields {
+            name
+            type {
+              kind
+              name
+              ofType { kind name }
+            }
+          }
+        }
+      }
+    }
+  }
+}
+"""
+
 
 class AlexaApiError(Exception):
     """Raised when Alexa rejects or cannot process a request."""
@@ -193,3 +249,30 @@ class AlexaRoomApi:
                 "memberDeviceIdsUpdateOperation": operation,
             },
         )
+
+    async def async_create_group(self, friendly_name: str) -> None:
+        """Create an empty Alexa device group."""
+        await self._graphql(
+            "CreateDeviceGroup",
+            CREATE_GROUP_MUTATION,
+            {"friendlyName": friendly_name},
+        )
+
+    async def async_group_capabilities(self) -> dict[str, Any]:
+        """Return group-related GraphQL mutations exposed by Alexa."""
+        data = await self._graphql(
+            "AlexaRoomSyncCapabilities", CAPABILITIES_QUERY
+        )
+        fields = (
+            data.get("__schema", {})
+            .get("mutationType", {})
+            .get("fields", [])
+        )
+        return {
+            "group_mutations": [
+                item
+                for item in fields
+                if "group" in str(item.get("name", "")).casefold()
+            ],
+            "create_input": data.get("createDeviceGroupInput"),
+        }

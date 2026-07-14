@@ -1,3 +1,7 @@
+capabilities:
+  name: Verifica capacità Alexa
+  description: Interroga in sola lettura le mutation di gruppo esposte dallo schema Alexa.
+
 preview:
   name: Anteprima sincronizzazione
   description: Calcola le modifiche senza modificare alcun gruppo Alexa.

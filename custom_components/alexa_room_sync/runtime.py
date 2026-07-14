@@ -38,7 +38,7 @@ class AlexaRoomSyncRuntime:
             )
 
     async def async_apply(self, hass: HomeAssistant) -> dict[str, Any]:
-        """Re-read, then apply removals before additions serially."""
+        """Create missing rooms, then apply membership changes serially."""
         async with self.lock:
             endpoints, groups = await asyncio.gather(
                 self.api.async_list_endpoints(), self.api.async_list_groups()
@@ -50,6 +50,29 @@ class AlexaRoomSyncRuntime:
                 collect_candidates(hass),
                 self.manual_mappings,
             )
+            created_groups: list[str] = []
+            for group_name in sorted(set(plan.missing_alexa_groups)):
+                await self.api.async_create_group(group_name)
+                created_groups.append(group_name)
+
+            # New group IDs are assigned by Alexa. Re-read the groups and
+            # rebuild the plan so all following operations use those IDs.
+            if created_groups:
+                expected_names = {item.casefold() for item in created_groups}
+                for attempt in range(5):
+                    groups = await self.api.async_list_groups()
+                    visible_names = {item.name.casefold() for item in groups}
+                    if expected_names <= visible_names:
+                        break
+                    if attempt < 4:
+                        await asyncio.sleep(1)
+                plan = build_plan(
+                    endpoints,
+                    groups,
+                    collect_candidates(hass),
+                    self.manual_mappings,
+                )
+
             completed: list[dict[str, str]] = []
             for operation in [*plan.removals, *plan.additions]:
                 await self.api.async_update_group(
@@ -65,18 +88,20 @@ class AlexaRoomSyncRuntime:
                     }
                 )
             result = plan.as_dict()
+            result["created_groups"] = created_groups
             result["completed"] = completed
+            result["applied_change_count"] = len(created_groups) + len(completed)
             return result
 
     def _filter_endpoints(self, endpoints):
-        """Keep configured bridge models plus explicit manual endpoints."""
+        """Exclude Alexa clients/apps/hubs; keep controllable HA matches."""
         manual_ids = set(self.manual_mappings.values())
-        allowed = {item.casefold() for item in self.endpoint_models}
+        excluded_categories = {"alexa_voice_enabled", "application", "hub"}
         return [
             endpoint
             for endpoint in endpoints
             if endpoint.endpoint_id in manual_ids
-            or (endpoint.model or "").casefold() in allowed
+            or (endpoint.category or "").casefold() not in excluded_categories
         ]
 
 

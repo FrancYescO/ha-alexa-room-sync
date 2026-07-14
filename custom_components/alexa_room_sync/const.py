@@ -13,6 +13,7 @@ DEFAULT_ENDPOINT_MODELS_JSON = '["MatterHub"]'
 
 SERVICE_PREVIEW = "preview"
 SERVICE_APPLY = "apply"
+SERVICE_CAPABILITIES = "capabilities"
 
 EVENT_SYNC_FINISHED = "alexa_room_sync_finished"
 

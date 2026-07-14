@@ -72,7 +72,13 @@ def build_plan(
         desired_area_by_endpoint[endpoint_id] = candidate.area_name
 
     manually_mapped_ids = set(desired_area_by_endpoint)
+    manually_mapped_names = {
+        normalize_name(endpoints_by_id[endpoint_id].name)
+        for endpoint_id in manually_mapped_ids
+    }
     for normalized, same_name_endpoints in endpoints_by_name.items():
+        if normalized in manually_mapped_names:
+            continue
         remaining = [
             item for item in same_name_endpoints
             if item.endpoint_id not in manually_mapped_ids
@@ -107,12 +113,30 @@ def build_plan(
 
     for endpoint_id, area_name in desired_area_by_endpoint.items():
         endpoint = endpoints_by_id[endpoint_id]
+        plan.mapped_count += 1
         matching_groups = groups_by_name.get(normalize_name(area_name), [])
-        if len(matching_groups) != 1:
+        if not matching_groups:
             plan.missing_alexa_groups.append(area_name)
+            plan.pending_additions.append(
+                {
+                    "endpoint_id": endpoint_id,
+                    "endpoint_name": endpoint.name,
+                    "group_name": area_name,
+                }
+            )
+            continue
+        if len(matching_groups) > 1:
+            plan.ambiguous.append(
+                {
+                    "reason": "duplicate_alexa_groups",
+                    "area_name": area_name,
+                    "group_ids": sorted(item.group_id for item in matching_groups),
+                    "endpoint_id": endpoint_id,
+                    "endpoint_name": endpoint.name,
+                }
+            )
             continue
         desired_group = matching_groups[0]
-        plan.mapped_count += 1
 
         # Only groups whose names correspond to HA areas are managed. Other
         # Alexa groups (audio, functional groups, etc.) are never modified.
