@@ -1,0 +1,27 @@
+{
+  "title": "Alexa Room Sync",
+  "config": {
+    "step": {
+      "user": {
+        "title": "Collega la sessione Alexa",
+        "description": "API Alexa privata e non supportata. I cookie sono memorizzati nella configurazione di Home Assistant. Prova prima sempre l'azione di anteprima.",
+        "data": {
+          "host": "Host Alexa regionale",
+          "cookie": "Header Cookie della richiesta GraphQL",
+          "headers_json": "Header app aggiuntivi in JSON (opzionale)",
+          "endpoint_models_json": "Modelli endpoint Alexa gestiti (JSON)",
+          "manual_mappings_json": "Mapping entity_id → endpoint Alexa in JSON (opzionale)"
+        }
+      }
+    },
+    "error": {
+      "cannot_connect": "Connessione ad Alexa fallita",
+      "invalid_auth": "Cookie Alexa non valido o scaduto",
+      "invalid_host": "Usa un host HTTPS Amazon Alexa supportato",
+      "invalid_json": "Uno dei campi JSON non è valido"
+    },
+    "abort": {
+      "already_configured": "Alexa Room Sync è già configurato"
+    }
+  }
+}

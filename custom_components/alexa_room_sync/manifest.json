@@ -1,0 +1,11 @@
+{
+  "domain": "alexa_room_sync",
+  "name": "Alexa Room Sync",
+  "codeowners": [],
+  "config_flow": true,
+  "integration_type": "service",
+  "iot_class": "cloud_polling",
+  "requirements": [],
+  "single_config_entry": true,
+  "version": "0.1.0"
+}

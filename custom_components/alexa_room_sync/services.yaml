@@ -1,0 +1,7 @@
+preview:
+  name: Anteprima sincronizzazione
+  description: Calcola le modifiche senza modificare alcun gruppo Alexa.
+
+apply:
+  name: Applica sincronizzazione
+  description: Rilegge lo stato e applica le sole modifiche non ambigue.
