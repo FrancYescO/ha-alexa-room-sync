@@ -71,6 +71,15 @@ def build_plan(
             continue
         desired_area_by_endpoint[endpoint_id] = candidate.area_name
 
+    # MatterHub exposes the originating Home Assistant entity_id as the Alexa
+    # endpoint serial number. Prefer this stable identity over display names.
+    for endpoint in endpoint_list:
+        if endpoint.endpoint_id in desired_area_by_endpoint:
+            continue
+        candidate = candidates_by_entity.get(endpoint.source_entity_id or "")
+        if candidate is not None:
+            desired_area_by_endpoint[endpoint.endpoint_id] = candidate.area_name
+
     manually_mapped_ids = set(desired_area_by_endpoint)
     manually_mapped_names = {
         normalize_name(endpoints_by_id[endpoint_id].name)

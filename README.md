@@ -106,6 +106,9 @@ Il componente confronta, senza distinzione tra maiuscole e accenti:
 - nome personalizzato e nome del device HA;
 - nome dell'endpoint Alexa.
 
+Quando MatterHub pubblica l'`entity_id` HA nel numero seriale Alexa, il
+componente usa direttamente questa identità stabile e non dipende dal nome.
+
 L'area effettiva è prima quella assegnata all'entità, altrimenti quella del
 device. Un match è automatico solo quando conduce a un singolo endpoint e a
 una singola area.

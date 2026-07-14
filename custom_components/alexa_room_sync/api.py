@@ -22,6 +22,7 @@ query listEndpointsForGcFlow {
       displayCategories { primary { value } }
       friendlyNameObject { value { text } }
       model { value { text } }
+      serialNumber { value { text } }
       enablement
     }
   }
@@ -193,6 +194,8 @@ class AlexaRoomApi:
             primary_category = display_categories.get("primary") or {}
             model = item.get("model") or {}
             model_value = model.get("value") or {}
+            serial_number = item.get("serialNumber") or {}
+            serial_number_value = serial_number.get("value") or {}
             name = friendly_name_value.get("text")
             endpoint_id = item.get("id")
             if not name or not endpoint_id:
@@ -203,6 +206,7 @@ class AlexaRoomApi:
                     name=name,
                     category=primary_category.get("value"),
                     model=model_value.get("text"),
+                    source_entity_id=serial_number_value.get("text"),
                 )
             )
         return endpoints

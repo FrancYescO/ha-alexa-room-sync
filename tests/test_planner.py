@@ -84,3 +84,22 @@ def test_duplicate_group_is_ambiguous_and_not_created() -> None:
     assert plan.missing_alexa_groups == []
     assert plan.additions == []
     assert plan.ambiguous[0]["reason"] == "duplicate_alexa_groups"
+
+
+def test_source_entity_id_wins_over_ambiguous_display_name() -> None:
+    plan = build_plan(
+        [
+            AlexaEndpoint(
+                "endpoint-1",
+                "Garage",
+                source_entity_id="binary_sensor.garage",
+            )
+        ],
+        [AlexaGroup("group-1", "Cortile", frozenset())],
+        [
+            HomeAssistantCandidate("binary_sensor.garage", "Garage", "Cortile"),
+            HomeAssistantCandidate("camera.garage", "Garage", "Garage"),
+        ],
+    )
+    assert plan.ambiguous == []
+    assert plan.additions[0].group_name == "Cortile"
