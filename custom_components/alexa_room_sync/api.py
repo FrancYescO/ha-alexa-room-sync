@@ -131,11 +131,13 @@ class AlexaRoomApi:
         for item in raw_items:
             if item.get("enablement") not in (None, "ENABLED"):
                 continue
-            name = (
-                item.get("friendlyNameObject", {})
-                .get("value", {})
-                .get("text")
-            )
+            friendly_name = item.get("friendlyNameObject") or {}
+            friendly_name_value = friendly_name.get("value") or {}
+            display_categories = item.get("displayCategories") or {}
+            primary_category = display_categories.get("primary") or {}
+            model = item.get("model") or {}
+            model_value = model.get("value") or {}
+            name = friendly_name_value.get("text")
             endpoint_id = item.get("id")
             if not name or not endpoint_id:
                 continue
@@ -143,10 +145,8 @@ class AlexaRoomApi:
                 AlexaEndpoint(
                     endpoint_id=endpoint_id,
                     name=name,
-                    category=item.get("displayCategories", {})
-                    .get("primary", {})
-                    .get("value"),
-                    model=item.get("model", {}).get("value", {}).get("text"),
+                    category=primary_category.get("value"),
+                    model=model_value.get("text"),
                 )
             )
         return endpoints
@@ -159,11 +159,14 @@ class AlexaRoomApi:
         raw_items = data.get("listDeviceGroups", {}).get("deviceGroups", [])
         groups: list[AlexaGroup] = []
         for item in raw_items:
-            name = item.get("friendlyName", {}).get("value", {}).get("text")
+            friendly_name = item.get("friendlyName") or {}
+            friendly_name_value = friendly_name.get("value") or {}
+            name = friendly_name_value.get("text")
             group_id = item.get("id")
             if not name or not group_id:
                 continue
-            members = item.get("memberDevices", {}).get("items", []) or []
+            member_devices = item.get("memberDevices") or {}
+            members = member_devices.get("items") or []
             groups.append(
                 AlexaGroup(
                     group_id=group_id,
