@@ -1,11 +1,14 @@
 {
   "domain": "alexa_room_sync",
   "name": "Alexa Room Sync",
-  "codeowners": [],
+  "codeowners": ["@FrancYescO"],
   "config_flow": true,
+  "documentation": "https://github.com/FrancYescO/alexa-room-sync",
   "integration_type": "service",
   "iot_class": "cloud_polling",
+  "issue_tracker": "https://github.com/FrancYescO/alexa-room-sync/issues",
+  "after_dependencies": ["alexa_media"],
   "requirements": [],
   "single_config_entry": true,
-  "version": "0.3.0"
+  "version": "0.4.0"
 }

@@ -6,7 +6,7 @@ not a public Amazon API and can change without notice.
 
 from __future__ import annotations
 
-from collections.abc import Mapping
+from collections.abc import Awaitable, Callable, Mapping
 from typing import Any
 
 from aiohttp import ClientError, ClientSession
@@ -128,19 +128,46 @@ class AlexaRoomApi:
 
     def __init__(
         self,
-        session: ClientSession,
+        session: ClientSession | None,
         host: str,
-        cookie: str,
+        cookie: str | None,
         extra_headers: Mapping[str, str] | None = None,
+        *,
+        session_provider: Callable[[], ClientSession] | None = None,
+        cookies_provider: Callable[[], Awaitable[Any]] | None = None,
     ) -> None:
         self._session = session
+        self._session_provider = session_provider
+        self._cookies_provider = cookies_provider
         self._url = f"{host.rstrip('/')}/nexus/v1/graphql"
         self._headers = {
             "Accept": "application/json",
             "Content-Type": "application/json",
-            "Cookie": cookie,
             **(extra_headers or {}),
         }
+        if cookie:
+            self._headers["Cookie"] = cookie
+
+    @classmethod
+    def from_alexa_media(
+        cls,
+        login_obj: Any,
+        host: str,
+        extra_headers: Mapping[str, str] | None = None,
+    ) -> AlexaRoomApi:
+        """Use Alexa Media Player's live authenticated session."""
+
+        async def _cookies() -> Any:
+            return await login_obj.load_cookie()
+
+        return cls(
+            None,
+            host,
+            None,
+            extra_headers,
+            session_provider=lambda: login_obj.session,
+            cookies_provider=_cookies,
+        )
 
     async def _graphql(
         self, operation_name: str, query: str, variables: dict[str, Any] | None = None
@@ -150,9 +177,19 @@ class AlexaRoomApi:
             "query": query,
             "variables": variables or {},
         }
+        session = self._session_provider() if self._session_provider else self._session
+        if session is None or session.closed:
+            raise AlexaAuthError("La sessione Alexa non è disponibile")
+        cookies = (
+            await self._cookies_provider() if self._cookies_provider else None
+        )
         try:
-            async with self._session.post(
-                self._url, json=payload, headers=self._headers, timeout=30
+            async with session.post(
+                self._url,
+                json=payload,
+                headers=self._headers,
+                cookies=cookies,
+                timeout=30,
             ) as response:
                 if response.status in (401, 403):
                     raise AlexaAuthError("La sessione Amazon/Alexa è scaduta")

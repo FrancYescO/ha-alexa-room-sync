@@ -17,7 +17,12 @@ from homeassistant.helpers.selector import (
 )
 
 from .api import AlexaApiError, AlexaAuthError, AlexaRoomApi
+from .auth import alexa_media_accounts, get_alexa_media_login
 from .const import (
+    AUTH_ALEXA_MEDIA,
+    AUTH_COOKIE,
+    CONF_ALEXA_MEDIA_ENTRY_ID,
+    CONF_AUTH_METHOD,
     CONF_COOKIE,
     CONF_ENDPOINT_MODELS_JSON,
     CONF_HEADERS_JSON,
@@ -66,6 +71,7 @@ class AlexaRoomSyncConfigFlow(config_entries.ConfigFlow, domain=DOMAIN):
     ) -> FlowResult:
         """Configure and validate a captured Alexa session."""
         errors: dict[str, str] = {}
+        accounts = alexa_media_accounts(self.hass)
         if user_input is not None:
             try:
                 if not _valid_host(user_input[CONF_HOST]):
@@ -76,12 +82,33 @@ class AlexaRoomSyncConfigFlow(config_entries.ConfigFlow, domain=DOMAIN):
             except (json.JSONDecodeError, ValueError):
                 errors["base"] = "invalid_json"
             if not errors:
-                api = AlexaRoomApi(
-                    async_get_clientsession(self.hass),
-                    user_input[CONF_HOST],
-                    user_input[CONF_COOKIE],
-                    headers,
-                )
+                auth_method = user_input[CONF_AUTH_METHOD]
+                if auth_method == AUTH_ALEXA_MEDIA:
+                    resolved = get_alexa_media_login(
+                        self.hass, user_input.get(CONF_ALEXA_MEDIA_ENTRY_ID)
+                    )
+                    if resolved is None:
+                        errors["base"] = "alexa_media_unavailable"
+                        api = None
+                    else:
+                        alexa_media_entry_id, login_obj = resolved
+                        api = AlexaRoomApi.from_alexa_media(
+                            login_obj, user_input[CONF_HOST], headers
+                        )
+                else:
+                    cookie = user_input.get(CONF_COOKIE, "").strip()
+                    if not cookie:
+                        errors["base"] = "invalid_auth"
+                        api = None
+                    else:
+                        api = AlexaRoomApi(
+                            async_get_clientsession(self.hass),
+                            user_input[CONF_HOST],
+                            cookie,
+                            headers,
+                        )
+                if api is None:
+                    return self._show_form(user_input, accounts, errors)
                 try:
                     await api.async_list_groups()
                 except AlexaAuthError:
@@ -93,18 +120,54 @@ class AlexaRoomSyncConfigFlow(config_entries.ConfigFlow, domain=DOMAIN):
                     self._abort_if_unique_id_configured()
                     data = dict(user_input)
                     data[CONF_HEADERS_JSON] = json.dumps(headers)
+                    if auth_method == AUTH_ALEXA_MEDIA:
+                        data[CONF_ALEXA_MEDIA_ENTRY_ID] = alexa_media_entry_id
+                        data.pop(CONF_COOKIE, None)
                     return self.async_create_entry(
                         title="Alexa Room Sync", data=data
                     )
 
-        schema = vol.Schema(
+        return self._show_form(user_input, accounts, errors)
+
+    def _show_form(
+        self,
+        user_input: dict | None,
+        accounts: dict[str, str],
+        errors: dict[str, str],
+    ) -> FlowResult:
+        """Show setup form with the authentication methods available now."""
+        auth_options = {AUTH_COOKIE: "Cookie da HAR"}
+        if accounts:
+            auth_options = {
+                AUTH_ALEXA_MEDIA: "Alexa Media Player (consigliato)",
+                **auth_options,
+            }
+        default_auth = AUTH_ALEXA_MEDIA if accounts else AUTH_COOKIE
+        fields: dict = {
+            vol.Required(
+                CONF_AUTH_METHOD,
+                default=(user_input or {}).get(CONF_AUTH_METHOD, default_auth),
+            ): vol.In(auth_options),
+        }
+        if accounts:
+            fields[
+                vol.Required(
+                    CONF_ALEXA_MEDIA_ENTRY_ID,
+                    default=(user_input or {}).get(
+                        CONF_ALEXA_MEDIA_ENTRY_ID, next(iter(accounts))
+                    ),
+                )
+            ] = vol.In(accounts)
+        fields.update(
             {
                 vol.Required(
                     CONF_HOST,
                     default=(user_input or {}).get(CONF_HOST, DEFAULT_HOST),
                 ): str,
-                vol.Required(CONF_COOKIE): TextSelector(
-                    TextSelectorConfig(type=TextSelectorType.PASSWORD, multiline=True)
+                vol.Optional(CONF_COOKIE): TextSelector(
+                    TextSelectorConfig(
+                        type=TextSelectorType.PASSWORD, multiline=True
+                    )
                 ),
                 vol.Optional(
                     CONF_HEADERS_JSON,
@@ -123,6 +186,9 @@ class AlexaRoomSyncConfigFlow(config_entries.ConfigFlow, domain=DOMAIN):
                     ),
                 ): TextSelector(TextSelectorConfig(multiline=True)),
             }
+        )
+        schema = vol.Schema(
+            fields
         )
         return self.async_show_form(
             step_id="user", data_schema=schema, errors=errors

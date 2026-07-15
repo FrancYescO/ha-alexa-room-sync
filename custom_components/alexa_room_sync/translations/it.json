@@ -3,20 +3,23 @@
   "config": {
     "step": {
       "user": {
-        "title": "Collega la sessione Alexa",
-        "description": "API Alexa privata e non supportata. I cookie sono memorizzati nella configurazione di Home Assistant. Prova prima sempre l'azione di anteprima.",
+        "title": "Collega una sessione Alexa",
+        "description": "È consigliata l'autenticazione di Alexa Media Player. Il cookie da HAR rimane disponibile come ripiego. Alexa Room Sync usa un'API Alexa privata e non ufficiale.",
         "data": {
-          "host": "Host Alexa regionale",
-          "cookie": "Header Cookie della richiesta GraphQL",
+          "auth_method": "Metodo di autenticazione",
+          "alexa_media_entry_id": "Account Alexa Media Player",
+          "host": "Host API Alexa regionale",
+          "cookie": "Header Cookie GraphQL (solo ripiego HAR)",
           "headers_json": "Header app aggiuntivi in JSON (opzionale)",
           "endpoint_models_json": "Modelli endpoint Alexa gestiti (JSON)",
-          "manual_mappings_json": "Mapping entity_id → endpoint Alexa in JSON (opzionale)"
+          "manual_mappings_json": "Mapping entity_id → endpoint Alexa (JSON, opzionale)"
         }
       }
     },
     "error": {
+      "alexa_media_unavailable": "Alexa Media Player non è caricato o richiede una nuova autenticazione",
       "cannot_connect": "Connessione ad Alexa fallita",
-      "invalid_auth": "Cookie Alexa non valido o scaduto",
+      "invalid_auth": "L'autenticazione Alexa non è valida o è scaduta",
       "invalid_host": "Usa un host HTTPS Amazon Alexa supportato",
       "invalid_json": "Uno dei campi JSON non è valido"
     },

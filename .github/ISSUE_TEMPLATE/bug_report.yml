@@ -1,0 +1,41 @@
+name: Bug report
+description: Report a reproducible Alexa Room Sync problem
+title: "[Bug]: "
+labels:
+  - bug
+body:
+  - type: markdown
+    attributes:
+      value: Do not attach HAR files, cookies, tokens, email addresses, or unredacted endpoint IDs.
+  - type: input
+    id: version
+    attributes:
+      label: Alexa Room Sync version
+    validations:
+      required: true
+  - type: input
+    id: home_assistant
+    attributes:
+      label: Home Assistant version
+    validations:
+      required: true
+  - type: dropdown
+    id: authentication
+    attributes:
+      label: Authentication method
+      options:
+        - Alexa Media Player
+        - HAR cookie
+    validations:
+      required: true
+  - type: textarea
+    id: description
+    attributes:
+      label: What happened?
+    validations:
+      required: true
+  - type: textarea
+    id: preview
+    attributes:
+      label: Redacted preview or logs
+      description: Remove all account and endpoint identifiers first.

@@ -1,122 +1,148 @@
 # Alexa Room Sync
 
-Custom integration sperimentale per sincronizzare le aree di Home Assistant
-con i gruppi/stanza Alexa degli endpoint esposti, per esempio, da Home
-Assistant Matter Hub.
+<p align="center">
+  <img src="custom_components/alexa_room_sync/brand/logo.png" width="220" alt="Alexa Room Sync logo">
+</p>
+
+<p align="center">
+  A Home Assistant custom integration that synchronizes Home Assistant areas
+  with Alexa rooms and automatically creates missing Alexa groups.
+</p>
 
 > [!WARNING]
-> Usa endpoint GraphQL privati osservati nell'app Alexa a luglio 2026. Non è
-> un'API pubblica Amazon: può cambiare e il cookie di sessione scadrà. Esegui
-> sempre `alexa_room_sync.preview` prima di `alexa_room_sync.apply`.
+> Alexa Room Sync uses private, undocumented Alexa GraphQL endpoints. Amazon can
+> change or remove them at any time. This project is not affiliated with or
+> endorsed by Amazon, Alexa, Nabu Casa, or Home Assistant.
 
-## Protezioni incluse
+## Features
 
-- Crea soltanto i gruppi Alexa mancanti richiesti da associazioni univoche.
-- Non rinomina né elimina gruppi Alexa.
-- Gestisce solo gruppi il cui nome coincide con un'area Home Assistant.
-- Non modifica gruppi Alexa estranei alle aree HA.
-- Blocca nomi Alexa duplicati e mapping su più aree.
-- Applica prima le rimozioni e poi le aggiunte, una richiesta alla volta.
-- Rilegge endpoint e gruppi immediatamente prima di ogni applicazione.
-- Le azioni avviate da un utente richiedono un amministratore HA.
+- Creates an Alexa room when a matched Home Assistant area does not exist.
+- Adds matched Alexa endpoints to their correct room.
+- Removes endpoints only from other groups whose names match HA areas.
+- Never modifies unrelated Alexa groups such as music or functional groups.
+- Uses the MatterHub source `entity_id` when Alexa exposes it as the endpoint
+  serial number.
+- Falls back to conservative normalized-name matching.
+- Blocks duplicate names, duplicate groups, and multi-area ambiguity.
+- Provides a read-only preview before applying changes.
+- Reuses the live authentication from Alexa Media Player when available.
+- Supports a captured HAR cookie as an independent fallback.
 
-## Installazione
+## Requirements
 
-1. Copia `custom_components/alexa_room_sync` nella directory
-   `/config/custom_components/` di Home Assistant.
-2. Riavvia Home Assistant.
-3. Apri **Impostazioni → Dispositivi e servizi → Aggiungi integrazione** e
-   cerca **Alexa Room Sync**.
+- Home Assistant 2026.3 or newer.
+- Devices already exposed to Alexa, for example through
+  [Home Assistant Matter Hub](https://github.com/t0bst4r/home-assistant-matter-hub).
+- Recommended: a working
+  [Alexa Media Player](https://github.com/alandtse/alexa_media_player)
+  configuration for shared authentication.
 
-## Configurazione della sessione
+## Installation with HACS
 
-Nel HAR fornito, la richiesta utile è:
+Until the repository is included in the default HACS catalog:
+
+1. Open HACS in Home Assistant.
+2. Select **Custom repositories**.
+3. Add `https://github.com/FrancYescO/alexa-room-sync` as an **Integration**.
+4. Install **Alexa Room Sync**.
+5. Restart Home Assistant.
+6. Go to **Settings → Devices & services → Add integration** and select
+   **Alexa Room Sync**.
+
+## Manual installation
+
+Copy `custom_components/alexa_room_sync` into the Home Assistant
+`/config/custom_components/` directory and restart Home Assistant.
+
+## Authentication
+
+### Alexa Media Player — recommended
+
+Alexa Room Sync follows the same runtime-sharing pattern used by companion
+integrations such as SmartThings Extra. It obtains the loaded Alexa Media
+Player config entry and reuses `entry.runtime_data.login_obj`, including its
+current session and cookie store.
+
+Benefits:
+
+- no second Amazon login;
+- no HAR capture;
+- no duplicate password, OTP secret, or cookie stored by Alexa Room Sync;
+- Alexa Media Player reauthentication is automatically picked up.
+
+Alexa Media Player must be loaded before Alexa Room Sync. If it requires
+reauthentication, Alexa Room Sync waits instead of silently falling back to a
+stale credential.
+
+### HAR cookie fallback
+
+If Alexa Media Player is not installed, capture a recent Alexa app request:
 
 ```text
 POST https://eu-api-alexa.amazon.it/nexus/v1/graphql
-operationName: UpdateDeviceGroup
 ```
 
-Nel flusso di configurazione inserisci:
+Provide the complete `Cookie` header and the appropriate regional API host.
+The cookie is a credential: never publish HAR files or attach them to issues.
 
-- **Host**: `https://eu-api-alexa.amazon.it`
-- **Cookie**: il valore completo dell'header `Cookie` di una richiesta
-  `/nexus/v1/graphql` recente.
-- **Header aggiuntivi**: normalmente `{}` è sufficiente. Se Alexa rifiuta la
-  richiesta, inserisci come JSON soltanto gli header `x-amzn-*` presenti nella
-  stessa richiesta. Non inserire `Cookie`, `Host`, `Content-Length`, `Accept`
-  o `Content-Type`: vengono gestiti dal componente.
-- **Modelli endpoint**: il valore resta disponibile per compatibilità. La
-  sincronizzazione considera tutti gli endpoint controllabili e scarta client
-  Alexa, app e hub; modifica soltanto quelli con un nome HA univoco.
-- **Mapping manuali**: inizialmente `{}`.
+## Usage
 
-Il cookie è una credenziale: non pubblicare il HAR e non allegarlo a issue o
-log. Home Assistant lo memorizza nella propria configurazione interna, come le
-altre credenziali delle integrazioni.
-
-## Prima esecuzione
-
-Da **Strumenti per sviluppatori → Azioni**, esegui:
+Run the read-only preview from **Developer tools → Actions**:
 
 ```yaml
 action: alexa_room_sync.preview
 response_variable: preview
 ```
 
-La risposta contiene:
+The response includes:
 
-- `additions` e `removals`: modifiche che verrebbero effettuate;
-- `ambiguous`: nomi duplicati o mapping non sicuri;
-- `unmatched_alexa`: endpoint Alexa senza corrispondenza HA;
-- `missing_alexa_groups`: aree HA prive di un gruppo Alexa omonimo;
-- `groups_to_create`: stanze che verranno create automaticamente;
-- `pending_additions`: endpoint che saranno aggiunti dopo la creazione stanza;
-- `change_count`: totale di creazioni e modifiche previste.
+- `groups_to_create`: missing Alexa rooms;
+- `pending_additions`: endpoints waiting for room creation;
+- `additions` and `removals`: membership changes;
+- `ambiguous`: mappings intentionally blocked;
+- `unmatched_alexa`: endpoints without an HA match;
+- `change_count`: total planned changes.
 
-Applica soltanto dopo aver controllato l'anteprima:
+Apply the plan:
 
 ```yaml
 action: alexa_room_sync.apply
 response_variable: result
 ```
 
-Al termine viene emesso anche l'evento `alexa_room_sync_finished`.
+Alexa Room Sync rereads both systems immediately before applying, creates
+missing rooms, rereads the Alexa-assigned group IDs, and then performs
+membership updates serially. It emits `alexa_room_sync_finished` when done.
 
-## Mapping manuale dei duplicati
+## Matching and safety model
 
-Il mapping è `entity_id` Home Assistant → `endpoint_id` Alexa. Esempio:
+The preferred mapping is Alexa endpoint serial number → HA `entity_id`. When
+that identity is unavailable, matching compares the Alexa name against the HA
+entity name, original name, state friendly name, and device names while
+ignoring case, accents, and repeated whitespace.
 
-```json
-{
-  "light.lampada_scrivania": "amzn1.alexa.endpoint.00000000-0000-0000-0000-000000000000"
-}
+An automatic match must resolve to one endpoint and one HA area. Ambiguous
+items remain untouched and can be resolved using an explicit
+`entity_id` → Alexa `endpoint_id` mapping.
+
+## Known limitations
+
+- The Alexa GraphQL API is private and may change without notice.
+- Alexa Media Player is itself an unofficial integration.
+- Alexa may take a few seconds to expose a newly created group.
+- This release does not rename or delete Alexa groups.
+- Authentication and API behavior may differ between Amazon regions.
+
+## Development
+
+```bash
+python -m compileall custom_components/alexa_room_sync
+pytest -q
 ```
 
-L'`endpoint_id` compare nella sezione `ambiguous`/`unmatched_alexa`
-dell'anteprima. Per modificare i mapping, elimina e riconfigura l'integrazione
-in questa versione MVP.
+Pull requests are welcome. Please avoid including cookies, HAR files, email
+addresses, endpoint IDs, or other account-specific data in tests and reports.
 
-## Criterio di associazione
+## License
 
-Il componente confronta, senza distinzione tra maiuscole e accenti:
-
-- nome personalizzato e nome originale dell'entità;
-- `friendly_name` dello stato;
-- nome personalizzato e nome del device HA;
-- nome dell'endpoint Alexa.
-
-Quando MatterHub pubblica l'`entity_id` HA nel numero seriale Alexa, il
-componente usa direttamente questa identità stabile e non dipende dal nome.
-
-L'area effettiva è prima quella assegnata all'entità, altrimenti quella del
-device. Un match è automatico solo quando conduce a un singolo endpoint e a
-una singola area.
-
-## Ripristino e limiti
-
-La versione MVP non mantiene un backup separato: l'anteprima restituita da HA
-va salvata prima dell'applicazione. La mutation `REMOVE` è la controparte
-simmetrica della mutation `ADD` catturata nel HAR. Se Amazon cambia schema o
-autenticazione, il componente interrompe l'operazione e non tenta endpoint
-alternativi.
+[MIT](LICENSE)

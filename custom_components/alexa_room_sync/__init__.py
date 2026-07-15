@@ -10,11 +10,19 @@ import voluptuous as vol
 
 from homeassistant.config_entries import ConfigEntry
 from homeassistant.core import HomeAssistant, ServiceCall, SupportsResponse
-from homeassistant.exceptions import HomeAssistantError, Unauthorized
+from homeassistant.exceptions import (
+    ConfigEntryNotReady,
+    HomeAssistantError,
+    Unauthorized,
+)
 from homeassistant.helpers.aiohttp_client import async_get_clientsession
 
 from .api import AlexaApiError, AlexaRoomApi
+from .auth import get_alexa_media_login
 from .const import (
+    AUTH_ALEXA_MEDIA,
+    CONF_ALEXA_MEDIA_ENTRY_ID,
+    CONF_AUTH_METHOD,
     CONF_COOKIE,
     CONF_ENDPOINT_MODELS_JSON,
     CONF_HEADERS_JSON,
@@ -38,13 +46,58 @@ async def async_setup_entry(
 ) -> bool:
     """Set up Alexa Room Sync from a config entry."""
     extra_headers = json.loads(entry.data.get(CONF_HEADERS_JSON, "{}"))
-    entry.runtime_data = AlexaRoomSyncRuntime(
-        api=AlexaRoomApi(
+    auth_method = entry.data.get(CONF_AUTH_METHOD)
+    alexa_media = get_alexa_media_login(
+        hass, entry.data.get(CONF_ALEXA_MEDIA_ENTRY_ID)
+    )
+
+    api: AlexaRoomApi
+    if auth_method == AUTH_ALEXA_MEDIA:
+        if alexa_media is None:
+            raise ConfigEntryNotReady(
+                "Alexa Media Player non è caricato o richiede una nuova autenticazione"
+            )
+        _, login_obj = alexa_media
+        api = AlexaRoomApi.from_alexa_media(
+            login_obj, entry.data[CONF_HOST], extra_headers
+        )
+    elif auth_method is None and alexa_media is not None:
+        # Migrate legacy HAR/cookie entries only after proving that the Alexa
+        # Media Player session can access the required GraphQL endpoint.
+        alexa_media_entry_id, login_obj = alexa_media
+        candidate_api = AlexaRoomApi.from_alexa_media(
+            login_obj, entry.data[CONF_HOST], extra_headers
+        )
+        try:
+            await candidate_api.async_list_groups()
+        except AlexaApiError:
+            api = AlexaRoomApi(
+                async_get_clientsession(hass),
+                entry.data[CONF_HOST],
+                entry.data.get(CONF_COOKIE),
+                extra_headers,
+            )
+        else:
+            migrated_data = dict(entry.data)
+            migrated_data.pop(CONF_COOKIE, None)
+            migrated_data[CONF_AUTH_METHOD] = AUTH_ALEXA_MEDIA
+            migrated_data[CONF_ALEXA_MEDIA_ENTRY_ID] = alexa_media_entry_id
+            hass.config_entries.async_update_entry(entry, data=migrated_data)
+            api = candidate_api
+            _LOGGER.info(
+                "Migrated authentication to Alexa Media Player config entry %s",
+                alexa_media_entry_id,
+            )
+    else:
+        api = AlexaRoomApi(
             async_get_clientsession(hass),
             entry.data[CONF_HOST],
-            entry.data[CONF_COOKIE],
+            entry.data.get(CONF_COOKIE),
             extra_headers,
-        ),
+        )
+
+    entry.runtime_data = AlexaRoomSyncRuntime(
+        api=api,
         manual_mappings=parse_string_mapping(
             entry.data.get(CONF_MANUAL_MAPPINGS_JSON, "{}")
         ),
