@@ -30,6 +30,7 @@ from .const import (
     CONF_MANUAL_MAPPINGS_JSON,
     DOMAIN,
     EVENT_SYNC_FINISHED,
+    PLATFORMS,
     SERVICE_APPLY,
     SERVICE_CAPABILITIES,
     SERVICE_PREVIEW,
@@ -161,6 +162,7 @@ async def async_setup_entry(
         schema=vol.Schema({}),
         supports_response=SupportsResponse.OPTIONAL,
     )
+    await hass.config_entries.async_forward_entry_setups(entry, PLATFORMS)
     return True
 
 
@@ -168,7 +170,10 @@ async def async_unload_entry(
     hass: HomeAssistant, entry: AlexaRoomSyncConfigEntry
 ) -> bool:
     """Unload Alexa Room Sync."""
+    unload_ok = await hass.config_entries.async_unload_platforms(entry, PLATFORMS)
+    if not unload_ok:
+        return False
     hass.services.async_remove(DOMAIN, SERVICE_PREVIEW)
     hass.services.async_remove(DOMAIN, SERVICE_APPLY)
     hass.services.async_remove(DOMAIN, SERVICE_CAPABILITIES)
-    return True
+    return unload_ok

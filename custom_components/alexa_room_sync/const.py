@@ -2,6 +2,8 @@
 
 DOMAIN = "alexa_room_sync"
 
+PLATFORMS = ["button"]
+
 CONF_COOKIE = "cookie"
 CONF_AUTH_METHOD = "auth_method"
 CONF_ALEXA_MEDIA_ENTRY_ID = "alexa_media_entry_id"

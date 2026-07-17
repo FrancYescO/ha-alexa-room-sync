@@ -2,6 +2,13 @@
 
 All notable changes to this project are documented in this file.
 
+## 0.5.0
+
+- Added `button.alexa_room_sync_verify` to run a read-only verification.
+- Added `button.alexa_room_sync_sync` to run the synchronization.
+- Added persistent Home Assistant notifications for verification differences,
+  synchronization results, and Alexa API errors.
+
 ## 0.4.0
 
 - Added Alexa Media Player shared authentication.

@@ -26,5 +26,11 @@
     "abort": {
       "already_configured": "Alexa Room Sync è già configurato"
     }
+  },
+  "entity": {
+    "button": {
+      "verify": { "name": "Verifica sincronizzazione" },
+      "sync": { "name": "Sincronizza ora" }
+    }
   }
 }

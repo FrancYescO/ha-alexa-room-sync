@@ -25,6 +25,8 @@
 - Falls back to conservative normalized-name matching.
 - Blocks duplicate names, duplicate groups, and multi-area ambiguity.
 - Provides a read-only preview before applying changes.
+- Exposes Verify and Synchronize button entities in Home Assistant.
+- Publishes persistent notifications with verification differences and sync results.
 - Reuses the live authentication from Alexa Media Player when available.
 - Supports a captured HAR cookie as an independent fallback.
 
@@ -86,6 +88,16 @@ Provide the complete `Cookie` header and the appropriate regional API host.
 The cookie is a credential: never publish HAR files or attach them to issues.
 
 ## Usage
+
+The integration creates two button entities on its device:
+
+- **Verify synchronization** performs a read-only comparison and creates a
+  persistent Home Assistant notification listing all differences and blocked
+  mappings.
+- **Synchronize now** creates missing rooms, updates memberships, and creates a
+  notification summarizing the applied changes.
+
+The same operations remain available as actions for automations and scripts.
 
 Run the read-only preview from **Developer tools → Actions**:
 
