@@ -25,7 +25,7 @@
 - Falls back to conservative normalized-name matching.
 - Blocks duplicate names, duplicate groups, and multi-area ambiguity.
 - Provides a read-only preview before applying changes.
-- Exposes Verify and Synchronize button entities in Home Assistant.
+- Exposes Verify, Synchronize, stale-endpoint preview, and guarded cleanup buttons.
 - Publishes persistent notifications with verification differences and sync results.
 - Reuses the live authentication from Alexa Media Player when available.
 - Supports a captured HAR cookie as an independent fallback.
@@ -89,13 +89,17 @@ The cookie is a credential: never publish HAR files or attach them to issues.
 
 ## Usage
 
-The integration creates two button entities on its device:
+The integration creates four button entities on its device:
 
 - **Verify synchronization** performs a read-only comparison and creates a
   persistent Home Assistant notification listing all differences and blocked
   mappings.
 - **Synchronize now** creates missing rooms, updates memberships, and creates a
   notification summarizing the applied changes.
+- **Verify stale endpoints** lists deletable Home Assistant skill endpoints and
+  arms that exact selection for 10 minutes.
+- **Delete stale endpoints** deletes only the selection armed by the latest
+  preview, after rereading Alexa and revalidating every safety guard.
 
 The same operations remain available as actions for automations and scripts.
 
@@ -137,8 +141,10 @@ action: alexa_room_sync.cleanup_preview
 response_variable: cleanup
 ```
 
-Deletion is never automatic. Copy only the desired `endpoint_id` values from
-the preview and explicitly confirm the destructive action:
+Deletion is never part of room synchronization. In the UI, first press
+**Verify stale endpoints**, inspect its notification, then press **Delete stale
+endpoints** within 10 minutes. The action API also allows deleting an explicit
+selection by copying only the desired `endpoint_id` values from the preview:
 
 ```yaml
 action: alexa_room_sync.delete_stale_endpoints

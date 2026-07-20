@@ -2,6 +2,13 @@
 
 All notable changes to this project are documented in this file.
 
+## 0.7.0
+
+- Added buttons to preview and delete stale Home Assistant Alexa endpoints.
+- Added a two-step, 10-minute cleanup guard: deletion is limited to the exact
+  candidates returned by the latest preview and every endpoint is revalidated.
+- Added detailed cleanup preview and completion notifications.
+
 ## 0.6.0
 
 - Added richer Alexa endpoint discovery, including Home Assistant skill origin,

@@ -145,7 +145,7 @@ async def async_setup_entry(
     async def _cleanup_preview(call: ServiceCall) -> dict[str, Any]:
         await _assert_admin(call)
         try:
-            stale = await entry.runtime_data.async_stale_endpoints(hass)
+            stale = await entry.runtime_data.async_prepare_stale_cleanup(hass)
         except AlexaApiError as err:
             raise HomeAssistantError(str(err)) from err
         return {"stale_count": len(stale), "stale_endpoints": stale}

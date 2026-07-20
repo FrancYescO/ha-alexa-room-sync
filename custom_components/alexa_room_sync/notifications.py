@@ -47,6 +47,35 @@ def format_sync_notification(result: dict[str, Any]) -> str:
     return "\n".join(lines)
 
 
+def format_cleanup_preview_notification(items: list[dict[str, Any]]) -> str:
+    """Format the guarded stale-endpoint cleanup preview."""
+    if not items:
+        return "Non sono stati trovati endpoint Home Assistant obsoleti su Alexa."
+    lines = [
+        f"Trovati **{len(items)} endpoint obsoleti**. Controlla l'elenco; il pulsante "
+        "**Elimina endpoint obsoleti** rimane abilitato per questa verifica per 10 minuti."
+    ]
+    lines.extend(
+        f"- **{item.get('endpoint_name') or 'Endpoint senza nome'}** — "
+        f"sorgente HA: `{item.get('entity_id') or 'sconosciuta'}`"
+        for item in items
+    )
+    return "\n".join(lines)
+
+
+def format_cleanup_delete_notification(result: dict[str, Any]) -> str:
+    """Format a completed guarded stale-endpoint deletion."""
+    items = result.get("deleted", [])
+    count = int(result.get("deleted_count", 0))
+    lines = [f"Pulizia completata: **{count} endpoint obsoleti eliminati**."]
+    lines.extend(
+        f"- **{item.get('endpoint_name') or 'Endpoint senza nome'}** — "
+        f"sorgente HA: `{item.get('entity_id') or 'sconosciuta'}`"
+        for item in items
+    )
+    return "\n".join(lines)
+
+
 def _name(item: Any) -> str:
     if isinstance(item, str):
         return item

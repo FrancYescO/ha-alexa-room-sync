@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import asyncio
 import json
+import time
 from dataclasses import dataclass, field
 from typing import Any
 
@@ -24,6 +25,8 @@ class AlexaRoomSyncRuntime:
     manual_mappings: dict[str, str]
     endpoint_models: frozenset[str]
     lock: asyncio.Lock = field(default_factory=asyncio.Lock)
+    cleanup_candidate_ids: tuple[str, ...] = ()
+    cleanup_prepared_at: float | None = None
 
     async def async_plan(self, hass: HomeAssistant):
         """Read both systems and create a fresh plan."""
@@ -98,6 +101,57 @@ class AlexaRoomSyncRuntime:
         async with self.lock:
             endpoints = self._filter_endpoints(await self.api.async_list_endpoints())
             return _find_stale_home_assistant_endpoints(hass, endpoints)
+
+    async def async_prepare_stale_cleanup(
+        self, hass: HomeAssistant
+    ) -> list[dict[str, Any]]:
+        """Find stale endpoints and arm one guarded deletion attempt."""
+        async with self.lock:
+            endpoints = self._filter_endpoints(await self.api.async_list_endpoints())
+            stale = _find_stale_home_assistant_endpoints(hass, endpoints)
+            self.cleanup_candidate_ids = tuple(item["endpoint_id"] for item in stale)
+            self.cleanup_prepared_at = time.monotonic()
+            return stale
+
+    async def async_delete_prepared_stale_endpoints(
+        self, hass: HomeAssistant, max_age_seconds: int = 600
+    ) -> dict[str, Any]:
+        """Delete only candidates armed by a recent cleanup preview."""
+        async with self.lock:
+            if not self.cleanup_prepared_at:
+                raise ValueError(
+                    "Esegui prima Verifica endpoint obsoleti per preparare la pulizia"
+                )
+            if time.monotonic() - self.cleanup_prepared_at > max_age_seconds:
+                self.cleanup_candidate_ids = ()
+                self.cleanup_prepared_at = None
+                raise ValueError(
+                    "La verifica degli endpoint obsoleti è scaduta; eseguila di nuovo"
+                )
+
+            requested = list(self.cleanup_candidate_ids)
+            # Consume the preview even if Alexa rejects a request. A retry must
+            # always start from a new inventory read and explicit preview.
+            self.cleanup_candidate_ids = ()
+            self.cleanup_prepared_at = None
+            if not requested:
+                return {"deleted_count": 0, "deleted": []}
+
+            endpoints = self._filter_endpoints(await self.api.async_list_endpoints())
+            stale = _find_stale_home_assistant_endpoints(hass, endpoints)
+            stale_by_id = {item["endpoint_id"]: item for item in stale}
+            rejected = [item for item in requested if item not in stale_by_id]
+            if rejected:
+                raise ValueError(
+                    "Endpoint non eliminabili o non più obsoleti: " + ", ".join(rejected)
+                )
+
+            deleted: list[dict[str, Any]] = []
+            for endpoint_id in requested:
+                item = stale_by_id[endpoint_id]
+                await self.api.async_delete_appliance(item["appliance_id"])
+                deleted.append(item)
+            return {"deleted_count": len(deleted), "deleted": deleted}
 
     async def async_delete_stale_endpoints(
         self, hass: HomeAssistant, endpoint_ids: list[str]

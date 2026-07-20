@@ -30,7 +30,9 @@
   "entity": {
     "button": {
       "verify": { "name": "Verify synchronization" },
-      "sync": { "name": "Synchronize now" }
+      "sync": { "name": "Synchronize now" },
+      "cleanup": { "name": "Verify stale endpoints" },
+      "delete_stale": { "name": "Delete stale endpoints" }
     }
   }
 }

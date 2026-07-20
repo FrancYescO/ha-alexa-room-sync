@@ -13,7 +13,12 @@ from homeassistant.helpers.entity_platform import AddConfigEntryEntitiesCallback
 from . import AlexaRoomSyncConfigEntry
 from .api import AlexaApiError
 from .const import DOMAIN, EVENT_SYNC_FINISHED
-from .notifications import format_preview_notification, format_sync_notification
+from .notifications import (
+    format_cleanup_delete_notification,
+    format_cleanup_preview_notification,
+    format_preview_notification,
+    format_sync_notification,
+)
 
 _LOGGER = logging.getLogger(__name__)
 
@@ -27,6 +32,16 @@ BUTTONS = (
         key="sync",
         translation_key="sync",
         icon="mdi:sync",
+    ),
+    ButtonEntityDescription(
+        key="cleanup",
+        translation_key="cleanup",
+        icon="mdi:broom",
+    ),
+    ButtonEntityDescription(
+        key="delete_stale",
+        translation_key="delete_stale",
+        icon="mdi:delete-alert-outline",
     ),
 )
 
@@ -65,11 +80,34 @@ class AlexaRoomSyncButton(ButtonEntity):
                 result = (await self._entry.runtime_data.async_plan(self.hass)).as_dict()
                 message = format_preview_notification(result)
                 title = "Alexa Room Sync · Verifica"
-            else:
+            elif self.entity_description.key == "sync":
                 result = await self._entry.runtime_data.async_apply(self.hass)
                 self.hass.bus.async_fire(EVENT_SYNC_FINISHED, result)
                 message = format_sync_notification(result)
                 title = "Alexa Room Sync · Sincronizzazione"
+            elif self.entity_description.key == "cleanup":
+                stale = await self._entry.runtime_data.async_prepare_stale_cleanup(
+                    self.hass
+                )
+                message = format_cleanup_preview_notification(stale)
+                title = "Alexa Room Sync · Endpoint obsoleti"
+            else:
+                result = (
+                    await self._entry.runtime_data.async_delete_prepared_stale_endpoints(
+                        self.hass
+                    )
+                )
+                message = format_cleanup_delete_notification(result)
+                title = "Alexa Room Sync · Pulizia completata"
+        except ValueError as err:
+            _LOGGER.warning("Alexa Room Sync button action blocked: %s", err)
+            async_create(
+                self.hass,
+                f"Operazione bloccata: {err}",
+                title="Alexa Room Sync · Protezione pulizia",
+                notification_id=f"{DOMAIN}_{self.entity_description.key}",
+            )
+            return
         except AlexaApiError as err:
             _LOGGER.error("Alexa Room Sync button action failed: %s", err)
             async_create(
