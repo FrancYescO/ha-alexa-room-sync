@@ -15,6 +15,10 @@ class AlexaEndpoint:
     category: str | None = None
     model: str | None = None
     source_entity_id: str | None = None
+    manufacturer: str | None = None
+    description: str | None = None
+    source_provider: str | None = None
+    appliance_id: str | None = None
 
 
 @dataclass(frozen=True, slots=True)

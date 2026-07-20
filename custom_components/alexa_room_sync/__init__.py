@@ -33,6 +33,8 @@ from .const import (
     PLATFORMS,
     SERVICE_APPLY,
     SERVICE_CAPABILITIES,
+    SERVICE_CLEANUP_PREVIEW,
+    SERVICE_DELETE_STALE_ENDPOINTS,
     SERVICE_PREVIEW,
 )
 from .runtime import AlexaRoomSyncRuntime, parse_string_list, parse_string_mapping
@@ -140,11 +142,54 @@ async def async_setup_entry(
             raise HomeAssistantError(str(err)) from err
         return capabilities
 
+    async def _cleanup_preview(call: ServiceCall) -> dict[str, Any]:
+        await _assert_admin(call)
+        try:
+            stale = await entry.runtime_data.async_stale_endpoints(hass)
+        except AlexaApiError as err:
+            raise HomeAssistantError(str(err)) from err
+        return {"stale_count": len(stale), "stale_endpoints": stale}
+
+    async def _delete_stale_endpoints(call: ServiceCall) -> dict[str, Any]:
+        await _assert_admin(call)
+        if call.data["confirm"] is not True:
+            raise HomeAssistantError("Imposta confirm: true per autorizzare la cancellazione")
+        try:
+            result = await entry.runtime_data.async_delete_stale_endpoints(
+                hass, call.data["endpoint_ids"]
+            )
+        except AlexaApiError as err:
+            raise HomeAssistantError(str(err)) from err
+        except ValueError as err:
+            raise HomeAssistantError(str(err)) from err
+        return result
+
     hass.services.async_register(
         DOMAIN,
         SERVICE_CAPABILITIES,
         _capabilities,
         schema=vol.Schema({}),
+        supports_response=SupportsResponse.ONLY,
+    )
+    hass.services.async_register(
+        DOMAIN,
+        SERVICE_CLEANUP_PREVIEW,
+        _cleanup_preview,
+        schema=vol.Schema({}),
+        supports_response=SupportsResponse.ONLY,
+    )
+    hass.services.async_register(
+        DOMAIN,
+        SERVICE_DELETE_STALE_ENDPOINTS,
+        _delete_stale_endpoints,
+        schema=vol.Schema(
+            {
+                vol.Required("endpoint_ids"): vol.All(
+                    [str], vol.Length(min=1, max=100)
+                ),
+                vol.Required("confirm"): bool,
+            }
+        ),
         supports_response=SupportsResponse.ONLY,
     )
 
@@ -176,4 +221,6 @@ async def async_unload_entry(
     hass.services.async_remove(DOMAIN, SERVICE_PREVIEW)
     hass.services.async_remove(DOMAIN, SERVICE_APPLY)
     hass.services.async_remove(DOMAIN, SERVICE_CAPABILITIES)
+    hass.services.async_remove(DOMAIN, SERVICE_CLEANUP_PREVIEW)
+    hass.services.async_remove(DOMAIN, SERVICE_DELETE_STALE_ENDPOINTS)
     return unload_ok

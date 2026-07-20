@@ -2,6 +2,14 @@
 
 All notable changes to this project are documented in this file.
 
+## 0.6.0
+
+- Added richer Alexa endpoint discovery, including Home Assistant skill origin,
+  source entity IDs, descriptions, and legacy appliance identifiers.
+- Added a read-only cleanup preview for Alexa endpoints whose HA entity no
+  longer exists.
+- Added guarded, explicit deletion of selected stale Home Assistant endpoints.
+
 ## 0.5.1
 
 - Clarified that unmatched items are Alexa-side endpoints.

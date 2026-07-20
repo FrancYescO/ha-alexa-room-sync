@@ -22,6 +22,8 @@ ALEXA_MEDIA_DOMAIN = "alexa_media"
 SERVICE_PREVIEW = "preview"
 SERVICE_APPLY = "apply"
 SERVICE_CAPABILITIES = "capabilities"
+SERVICE_CLEANUP_PREVIEW = "cleanup_preview"
+SERVICE_DELETE_STALE_ENDPOINTS = "delete_stale_endpoints"
 
 EVENT_SYNC_FINISHED = "alexa_room_sync_finished"
 

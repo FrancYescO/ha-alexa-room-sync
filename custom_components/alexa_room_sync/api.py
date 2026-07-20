@@ -7,7 +7,9 @@ not a public Amazon API and can change without notice.
 from __future__ import annotations
 
 from collections.abc import Awaitable, Callable, Mapping
+import re
 from typing import Any
+from urllib.parse import quote
 
 from aiohttp import ClientError, ClientSession
 
@@ -15,15 +17,27 @@ from .const import UPDATE_ADD, UPDATE_REMOVE
 from .models import AlexaEndpoint, AlexaGroup
 
 LIST_ENDPOINTS_QUERY = """
-query listEndpointsForGcFlow {
-  listEndpoints(listEndpointsInput: {}) {
-    endpoints {
+query AlexaRoomSyncEndpoints {
+  endpoints(endpointsQueryParams: { paginationParams: { disablePagination: true } }) {
+    items {
+      endpointId
       id
       displayCategories { primary { value } }
+      friendlyName
       friendlyNameObject { value { text } }
       model { value { text } }
       serialNumber { value { text } }
-      enablement
+      description { value { text } }
+      manufacturer { value { text } }
+      isEnabled
+      legacyAppliance {
+        applianceId
+        friendlyDescription
+        manufacturerName
+        modelName
+        isEnabled
+        driverIdentity
+      }
     }
   }
 }
@@ -218,12 +232,13 @@ class AlexaRoomApi:
     async def async_list_endpoints(self) -> list[AlexaEndpoint]:
         """Return enabled Alexa endpoints."""
         data = await self._graphql(
-            "listEndpointsForGcFlow", LIST_ENDPOINTS_QUERY
+            "AlexaRoomSyncEndpoints", LIST_ENDPOINTS_QUERY
         )
-        raw_items = data.get("listEndpoints", {}).get("endpoints", [])
+        raw_items = data.get("endpoints", {}).get("items", [])
         endpoints: list[AlexaEndpoint] = []
         for item in raw_items:
-            if item.get("enablement") not in (None, "ENABLED"):
+            legacy = item.get("legacyAppliance") or {}
+            if item.get("isEnabled") is False or legacy.get("isEnabled") is False:
                 continue
             friendly_name = item.get("friendlyNameObject") or {}
             friendly_name_value = friendly_name.get("value") or {}
@@ -233,20 +248,65 @@ class AlexaRoomApi:
             model_value = model.get("value") or {}
             serial_number = item.get("serialNumber") or {}
             serial_number_value = serial_number.get("value") or {}
-            name = friendly_name_value.get("text")
-            endpoint_id = item.get("id")
+            description = item.get("description") or {}
+            description_value = description.get("value") or {}
+            manufacturer = item.get("manufacturer") or {}
+            manufacturer_value = manufacturer.get("value") or {}
+            driver_identity = legacy.get("driverIdentity") or {}
+            name = item.get("friendlyName") or friendly_name_value.get("text")
+            endpoint_id = item.get("endpointId") or item.get("id")
             if not name or not endpoint_id:
                 continue
+            description_text = (
+                description_value.get("text") or legacy.get("friendlyDescription")
+            )
+            serial_text = serial_number_value.get("text")
             endpoints.append(
                 AlexaEndpoint(
                     endpoint_id=endpoint_id,
                     name=name,
                     category=primary_category.get("value"),
-                    model=model_value.get("text"),
-                    source_entity_id=serial_number_value.get("text"),
+                    model=model_value.get("text") or legacy.get("modelName"),
+                    source_entity_id=(
+                        serial_text or _entity_id_from_description(description_text)
+                    ),
+                    manufacturer=(
+                        manufacturer_value.get("text")
+                        or legacy.get("manufacturerName")
+                    ),
+                    description=description_text,
+                    source_provider=driver_identity.get("namespace"),
+                    appliance_id=legacy.get("applianceId"),
                 )
             )
         return endpoints
+
+    async def async_delete_appliance(self, appliance_id: str) -> None:
+        """Delete one legacy Alexa smart-home appliance."""
+        session = self._session_provider() if self._session_provider else self._session
+        if session is None or session.closed:
+            raise AlexaAuthError("La sessione Alexa non è disponibile")
+        cookies = await self._cookies_provider() if self._cookies_provider else None
+        headers = dict(self._headers)
+        csrf = _csrf_cookie(cookies)
+        if csrf:
+            headers["csrf"] = csrf
+        url = f"{self._url.rsplit('/nexus/v1/graphql', 1)[0]}/api/phoenix/appliance/{quote(appliance_id, safe='')}"
+        try:
+            async with session.delete(
+                url, headers=headers, cookies=cookies, timeout=30
+            ) as response:
+                if response.status in (401, 403):
+                    raise AlexaAuthError("La sessione Amazon/Alexa è scaduta")
+                if response.status >= 400:
+                    body = (await response.text())[:300]
+                    raise AlexaApiError(
+                        f"Eliminazione Alexa rifiutata ({response.status}): {body}"
+                    )
+        except AlexaApiError:
+            raise
+        except (ClientError, TimeoutError, ValueError) as err:
+            raise AlexaApiError(f"Eliminazione Alexa fallita: {err}") from err
 
     async def async_list_groups(self) -> list[AlexaGroup]:
         """Return Alexa groups and their direct members."""
@@ -317,3 +377,27 @@ class AlexaRoomApi:
             ],
             "create_input": data.get("createDeviceGroupInput"),
         }
+
+
+def _entity_id_from_description(value: Any) -> str | None:
+    """Extract an HA entity ID from Alexa's Home Assistant description."""
+    if not isinstance(value, str):
+        return None
+    match = re.search(r"\b([a-z_]+\.[a-z0-9_]+)\s+via Home Assistant\b", value)
+    return match.group(1) if match else None
+
+
+def _csrf_cookie(cookies: Any) -> str | None:
+    """Best-effort extraction of Amazon's CSRF cookie."""
+    if cookies is None:
+        return None
+    if isinstance(cookies, Mapping):
+        value = cookies.get("csrf")
+        return getattr(value, "value", value) if value else None
+    try:
+        for item in cookies:
+            if getattr(item, "key", None) == "csrf":
+                return getattr(item, "value", None)
+    except TypeError:
+        return None
+    return None

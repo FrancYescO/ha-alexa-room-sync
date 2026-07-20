@@ -9,3 +9,25 @@ preview:
 apply:
   name: Applica sincronizzazione
   description: Rilegge lo stato e applica le sole modifiche non ambigue.
+
+cleanup_preview:
+  name: Anteprima endpoint Alexa obsoleti
+  description: Elenca gli endpoint creati dalla skill Home Assistant la cui entità HA non esiste più. Non modifica Alexa.
+
+delete_stale_endpoints:
+  name: Elimina endpoint Alexa obsoleti
+  description: Elimina solo endpoint esplicitamente selezionati e nuovamente verificati come residui di entità Home Assistant rimosse.
+  fields:
+    endpoint_ids:
+      name: Endpoint ID
+      description: Elenco degli endpoint_id restituiti da cleanup_preview.
+      required: true
+      selector:
+        text:
+          multiple: true
+    confirm:
+      name: Conferma
+      description: Deve essere true per eseguire la cancellazione permanente su Alexa.
+      required: true
+      selector:
+        boolean:

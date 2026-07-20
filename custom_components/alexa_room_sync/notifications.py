@@ -81,6 +81,10 @@ def _unmatched_alexa(item: Any) -> str:
         details.append(f"categoria: {item['category']}")
     if item.get("model"):
         details.append(f"modello: {item['model']}")
+    if item.get("manufacturer"):
+        details.append(f"produttore: {item['manufacturer']}")
+    if item.get("source_provider"):
+        details.append(f"provider: {item['source_provider']}")
 
     source = item.get("source_entity_id")
     source_kind = item.get("source_kind")

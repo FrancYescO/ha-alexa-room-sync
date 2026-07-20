@@ -126,6 +126,35 @@ Alexa Room Sync rereads both systems immediately before applying, creates
 missing rooms, rereads the Alexa-assigned group IDs, and then performs
 membership updates serially. It emits `alexa_room_sync_finished` when done.
 
+### Cleaning stale Home Assistant skill endpoints
+
+Alexa can retain devices previously exposed by the Home Assistant Alexa Smart
+Home skill after their HA entities have been removed. Preview only endpoints
+that are proven stale:
+
+```yaml
+action: alexa_room_sync.cleanup_preview
+response_variable: cleanup
+```
+
+Deletion is never automatic. Copy only the desired `endpoint_id` values from
+the preview and explicitly confirm the destructive action:
+
+```yaml
+action: alexa_room_sync.delete_stale_endpoints
+data:
+  endpoint_ids:
+    - amzn1.alexa.endpoint.example
+  confirm: true
+response_variable: deleted
+```
+
+Immediately before each request, the integration verifies again that the
+endpoint belongs to the Home Assistant skill, exposes a source HA `entity_id`,
+has a legacy Alexa appliance identifier, and that the entity no longer exists
+in either the HA entity registry or state machine. Active or unrelated devices
+are rejected.
+
 ## Matching and safety model
 
 The preferred mapping is Alexa endpoint serial number → HA `entity_id`. When

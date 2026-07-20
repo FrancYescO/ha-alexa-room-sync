@@ -121,6 +121,9 @@ def build_plan(
                     "name": item.name,
                     "category": item.category or "",
                     "model": item.model or "",
+                    "manufacturer": item.manufacturer or "",
+                    "description": item.description or "",
+                    "source_provider": item.source_provider or "",
                     "source_entity_id": item.source_entity_id or "",
                     "source_kind": (
                         "ha_entity_id"
