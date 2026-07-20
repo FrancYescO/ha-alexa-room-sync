@@ -116,7 +116,25 @@ def build_plan(
             )
         else:
             plan.unmatched_alexa.extend(
-                {"endpoint_id": item.endpoint_id, "name": item.name}
+                {
+                    "endpoint_id": item.endpoint_id,
+                    "name": item.name,
+                    "category": item.category or "",
+                    "model": item.model or "",
+                    "source_entity_id": item.source_entity_id or "",
+                    "source_kind": (
+                        "ha_entity_id"
+                        if _looks_like_entity_id(item.source_entity_id)
+                        else "alexa_serial"
+                        if item.source_entity_id
+                        else "missing"
+                    ),
+                    "reason": (
+                        "source_entity_not_in_managed_ha_area_and_no_exact_name_match"
+                        if _looks_like_entity_id(item.source_entity_id)
+                        else "no_exact_ha_name_match"
+                    ),
+                }
                 for item in remaining
             )
 
@@ -178,3 +196,8 @@ def build_plan(
                 )
 
     return plan
+
+
+def _looks_like_entity_id(value: str | None) -> bool:
+    """Return whether an Alexa serial resembles a Home Assistant entity ID."""
+    return bool(value and re.fullmatch(r"[a-z_]+\.[a-z0-9_]+", value))

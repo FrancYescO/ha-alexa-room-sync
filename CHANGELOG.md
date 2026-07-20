@@ -2,6 +2,12 @@
 
 All notable changes to this project are documented in this file.
 
+## 0.5.1
+
+- Clarified that unmatched items are Alexa-side endpoints.
+- Added Alexa endpoint ID, category, model, source serial/entity ID, and the
+  reason a safe Home Assistant match could not be made to verification output.
+
 ## 0.5.0
 
 - Added `button.alexa_room_sync_verify` to run a read-only verification.

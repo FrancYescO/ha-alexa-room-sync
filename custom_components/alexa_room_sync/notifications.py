@@ -21,7 +21,11 @@ def format_preview_notification(result: dict[str, Any]) -> str:
         ("Aggiunte dopo la creazione stanza", result.get("pending_additions", []), _operation),
         ("Entità da rimuovere", result.get("removals", []), _operation),
         ("Mapping ambigui (non modificati)", result.get("ambiguous", []), _ambiguous),
-        ("Endpoint Alexa non abbinati", result.get("unmatched_alexa", []), _name),
+        (
+            "Endpoint presenti su Alexa ma non associati a Home Assistant",
+            result.get("unmatched_alexa", []),
+            _unmatched_alexa,
+        ),
     )
     for title, items, formatter in sections:
         if not items:
@@ -64,3 +68,37 @@ def _ambiguous(item: Any) -> str:
         return str(item)
     name = item.get("endpoint_name") or item.get("entity_id") or "Mapping"
     return f"{name}: {item.get('reason', 'motivo sconosciuto')}"
+
+
+def _unmatched_alexa(item: Any) -> str:
+    """Describe an Alexa-side endpoint that has no safe HA match."""
+    if not isinstance(item, dict):
+        return f"Alexa: {item}"
+
+    name = item.get("name") or "Endpoint senza nome"
+    details = ["origine: Alexa"]
+    if item.get("category"):
+        details.append(f"categoria: {item['category']}")
+    if item.get("model"):
+        details.append(f"modello: {item['model']}")
+
+    source = item.get("source_entity_id")
+    source_kind = item.get("source_kind")
+    if source_kind == "ha_entity_id" and source:
+        details.append(
+            f"entity_id sorgente: `{source}` (non trovato tra le entità HA attive con stanza)"
+        )
+    elif source:
+        details.append(f"seriale/sorgente Alexa: `{source}`")
+    else:
+        details.append("entity_id sorgente: non esposto da Alexa")
+
+    if item.get("endpoint_id"):
+        details.append(f"endpoint_id Alexa: `{item['endpoint_id']}`")
+
+    reason = item.get("reason")
+    if reason == "source_entity_not_in_managed_ha_area_and_no_exact_name_match":
+        details.append("motivo: entity_id HA assente, disabilitato o senza stanza")
+    else:
+        details.append("motivo: nessun nome identico tra le entità HA con stanza")
+    return f"**Alexa · {name}** — " + "; ".join(details)

@@ -103,3 +103,29 @@ def test_source_entity_id_wins_over_ambiguous_display_name() -> None:
     )
     assert plan.ambiguous == []
     assert plan.additions[0].group_name == "Cortile"
+
+
+def test_unmatched_alexa_keeps_identifying_metadata() -> None:
+    plan = build_plan(
+        [
+            AlexaEndpoint(
+                "endpoint-1",
+                "Switch3",
+                category="SWITCH",
+                model="MatterHub",
+                source_entity_id="switch.presa_3",
+            )
+        ],
+        [],
+        [],
+    )
+    unmatched = plan.unmatched_alexa[0]
+    assert unmatched == {
+        "endpoint_id": "endpoint-1",
+        "name": "Switch3",
+        "category": "SWITCH",
+        "model": "MatterHub",
+        "source_entity_id": "switch.presa_3",
+        "source_kind": "ha_entity_id",
+        "reason": "source_entity_not_in_managed_ha_area_and_no_exact_name_match",
+    }
