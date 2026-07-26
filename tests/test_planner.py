@@ -4,6 +4,7 @@ from custom_components.alexa_room_sync.models import AlexaEndpoint, AlexaGroup
 from custom_components.alexa_room_sync.planner import (
     HomeAssistantCandidate,
     build_plan,
+    build_room_audit,
 )
 
 
@@ -132,3 +133,118 @@ def test_unmatched_alexa_keeps_identifying_metadata() -> None:
         "source_kind": "ha_entity_id",
         "reason": "source_entity_not_in_managed_ha_area_and_no_exact_name_match",
     }
+
+
+def test_moves_endpoint_out_of_safe_italian_legacy_room_alias() -> None:
+    plan = build_plan(
+        [AlexaEndpoint("echo", "Echo Show Camera Letto")],
+        [
+            AlexaGroup("legacy", "Camera da letto", frozenset({"echo"})),
+            AlexaGroup("canonical", "Camera Letto", frozenset()),
+        ],
+        [
+            HomeAssistantCandidate(
+                "media_player.echo_show_camera_letto",
+                "Echo Show Camera Letto",
+                "Camera Letto",
+            )
+        ],
+    )
+    assert [item.group_id for item in plan.removals] == ["legacy"]
+    assert [item.group_id for item in plan.additions] == ["canonical"]
+
+
+def test_unrelated_alexa_group_is_never_managed_as_room_alias() -> None:
+    plan = build_plan(
+        [AlexaEndpoint("echo", "Echo Show Camera Letto")],
+        [
+            AlexaGroup("functional", "Tutti gli Echo", frozenset({"echo"})),
+            AlexaGroup("canonical", "Camera Letto", frozenset()),
+        ],
+        [
+            HomeAssistantCandidate(
+                "media_player.echo_show_camera_letto",
+                "Echo Show Camera Letto",
+                "Camera Letto",
+            )
+        ],
+    )
+    assert plan.removals == []
+    assert [item.group_id for item in plan.additions] == ["canonical"]
+
+
+def test_room_audit_reports_echo_in_legacy_room() -> None:
+    mismatches, device_issues, inventory = build_room_audit(
+        [
+            AlexaEndpoint(
+                "echo",
+                "Echo Show Camera Letto",
+                category="ALEXA_VOICE_ENABLED",
+                manufacturer="Amazon",
+            )
+        ],
+        [
+            AlexaGroup("legacy", "Camera da letto", frozenset({"echo"})),
+            AlexaGroup("canonical", "Camera Letto", frozenset()),
+        ],
+        [
+            HomeAssistantCandidate(
+                "media_player.echo_show_camera_letto",
+                "Echo Show Camera Letto",
+                "Camera Letto",
+            )
+        ],
+    )
+    assert mismatches[0]["suggested_ha_area"] == "Camera Letto"
+    assert mismatches[0]["safe_alias"] is True
+    assert device_issues == [
+        {
+            "endpoint_id": "echo",
+            "endpoint_name": "Echo Show Camera Letto",
+            "current_alexa_group": "Camera da letto",
+            "expected_ha_area": "Camera Letto",
+            "already_in_target": False,
+        }
+    ]
+    assert inventory == [
+        {
+            "endpoint_id": "echo",
+            "endpoint_name": "Echo Show Camera Letto",
+            "category": "ALEXA_VOICE_ENABLED",
+            "expected_ha_area": "Camera Letto",
+            "alexa_room_groups": ["Camera da letto"],
+            "other_alexa_groups": [],
+            "status": "aligned",
+        }
+    ]
+
+
+def test_room_audit_reports_echo_in_wrong_exact_room() -> None:
+    _, device_issues, inventory = build_room_audit(
+        [
+            AlexaEndpoint(
+                "echo",
+                "Echo Show Cucina",
+                category="CAMERA",
+                manufacturer="Amazon",
+            )
+        ],
+        [
+            AlexaGroup("kitchen", "Cucina", frozenset()),
+            AlexaGroup("bedroom", "Camera Letto", frozenset({"echo"})),
+        ],
+        [
+            HomeAssistantCandidate(
+                "media_player.echo_show_cucina",
+                "Echo Show Cucina",
+                "Cucina",
+            ),
+            HomeAssistantCandidate(
+                "light.camera",
+                "Luce Camera",
+                "Camera Letto",
+            ),
+        ],
+    )
+    assert inventory[0]["status"] == "wrong_or_multiple_room"
+    assert device_issues[0]["expected_ha_area"] == "Cucina"

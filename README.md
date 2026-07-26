@@ -1,5 +1,9 @@
 # Alexa Room Sync
 
+[![Validate](https://github.com/FrancYescO/alexa-room-sync/actions/workflows/validate.yml/badge.svg)](https://github.com/FrancYescO/alexa-room-sync/actions/workflows/validate.yml)
+[![HACS custom](https://img.shields.io/badge/HACS-Custom-41BDF5.svg)](https://hacs.xyz/)
+[![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](LICENSE)
+
 <p align="center">
   <img src="custom_components/alexa_room_sync/brand/logo.png" width="220" alt="Alexa Room Sync logo">
 </p>
@@ -56,6 +60,8 @@ Until the repository is included in the default HACS catalog:
 5. Restart Home Assistant.
 6. Go to **Settings → Devices & services → Add integration** and select
    **Alexa Room Sync**.
+
+[Open this repository in HACS](https://my.home-assistant.io/redirect/hacs_repository/?owner=FrancYescO&repository=alexa-room-sync&category=integration)
 
 ## Manual installation
 
@@ -200,6 +206,9 @@ pytest -q
 
 Pull requests are welcome. Please avoid including cookies, HAR files, email
 addresses, endpoint IDs, or other account-specific data in tests and reports.
+
+The early Git history was reconstructed from preserved release archives. See
+[HISTORY.md](HISTORY.md) for provenance and limitations.
 
 ## License
 

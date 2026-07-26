@@ -1,0 +1,25 @@
+[build-system]
+requires = ["setuptools>=77"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "alexa-room-sync"
+version = "0.8.2"
+description = "Synchronize Home Assistant areas and Alexa rooms."
+readme = "README.md"
+requires-python = ">=3.13"
+license = "MIT"
+authors = [
+  { name = "FrancYescO" },
+]
+classifiers = [
+  "Development Status :: 4 - Beta",
+  "License :: OSI Approved :: MIT License",
+  "Programming Language :: Python :: 3",
+  "Programming Language :: Python :: 3.13",
+  "Programming Language :: Python :: 3.14",
+]
+
+[tool.pytest.ini_options]
+addopts = "-ra"
+testpaths = ["tests"]
