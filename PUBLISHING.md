@@ -3,7 +3,7 @@
 The repository content is prepared for:
 
 ```text
-https://github.com/FrancYescO/alexa-room-sync
+https://github.com/FrancYescO/ha-alexa-room-sync
 ```
 
 Before the first public release:
@@ -21,7 +21,7 @@ Before the first public release:
 Suggested commands after creating the empty GitHub repository:
 
 ```bash
-git remote add origin git@github.com:FrancYescO/alexa-room-sync.git
+git remote add origin git@github.com:FrancYescO/ha-alexa-room-sync.git
 git push --set-upstream origin main --follow-tags
 gh release create v0.8.2 --title "v0.8.2" --generate-notes
 ```

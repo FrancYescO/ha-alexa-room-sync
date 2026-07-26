@@ -1,6 +1,6 @@
 # Alexa Room Sync
 
-[![Validate](https://github.com/FrancYescO/alexa-room-sync/actions/workflows/validate.yml/badge.svg)](https://github.com/FrancYescO/alexa-room-sync/actions/workflows/validate.yml)
+[![Validate](https://github.com/FrancYescO/ha-alexa-room-sync/actions/workflows/validate.yml/badge.svg)](https://github.com/FrancYescO/ha-alexa-room-sync/actions/workflows/validate.yml)
 [![HACS custom](https://img.shields.io/badge/HACS-Custom-41BDF5.svg)](https://hacs.xyz/)
 [![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](LICENSE)
 
@@ -55,13 +55,13 @@ Until the repository is included in the default HACS catalog:
 
 1. Open HACS in Home Assistant.
 2. Select **Custom repositories**.
-3. Add `https://github.com/FrancYescO/alexa-room-sync` as an **Integration**.
+3. Add `https://github.com/FrancYescO/ha-alexa-room-sync` as an **Integration**.
 4. Install **Alexa Room Sync**.
 5. Restart Home Assistant.
 6. Go to **Settings → Devices & services → Add integration** and select
    **Alexa Room Sync**.
 
-[Open this repository in HACS](https://my.home-assistant.io/redirect/hacs_repository/?owner=FrancYescO&repository=alexa-room-sync&category=integration)
+[Open this repository in HACS](https://my.home-assistant.io/redirect/hacs_repository/?owner=FrancYescO&repository=ha-alexa-room-sync&category=integration)
 
 ## Manual installation
 
