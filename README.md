@@ -88,16 +88,71 @@ Alexa Media Player must be loaded before Alexa Room Sync. If it requires
 reauthentication, Alexa Room Sync waits instead of silently falling back to a
 stale credential.
 
-### HAR cookie fallback
+### Manual cookie fallback
 
-If Alexa Media Player is not installed, capture a recent Alexa app request:
+If Alexa Media Player is unavailable, Alexa Room Sync can use the authenticated
+cookie from a recent Alexa app request. The capture technique is based on the
+reverse-engineering work documented by
+[Shereef/Python-Delete-Alexa-Devices](https://github.com/Shereef/Python-Delete-Alexa-Devices).
+That project is also a useful reference for regional hosts and HTTP-capture
+troubleshooting.
 
-```text
-POST https://eu-api-alexa.amazon.it/nexus/v1/graphql
-```
+> [!CAUTION]
+> An Alexa cookie grants access to your Amazon account. Capture it only on a
+> trusted device, never publish it, never attach a HAR file to an issue, and
+> remove the capture from the sniffer when configuration is complete.
 
-Provide the complete `Cookie` header and the appropriate regional API host.
-The cookie is a credential: never publish HAR files or attach them to issues.
+1. Install an HTTPS traffic-capture tool. The referenced project documents
+   HTTP Catcher or Proxyman on iOS and HTTP Toolkit on Android. Capturing the
+   Alexa Android app can require certificate-pinning workarounds or a rooted
+   test environment.
+2. Sign in to the Alexa mobile app with the account used by your devices.
+3. Open **Devices**, start the capture, and pull down to refresh the device
+   list. Opening a room or device can help generate the required requests.
+4. Stop the capture and filter requests for your regional Alexa API host. Look
+   first for:
+
+   ```text
+   POST /nexus/v1/graphql
+   ```
+
+   If it is not present, locate `GET /api/behaviors/entities` as described by
+   the referenced project; it can be used to identify the authenticated host
+   and cookie from the same Alexa session.
+5. In the request headers, copy the complete value of `Cookie`. Paste only the
+   value after `Cookie:`, preserving every `name=value` pair and semicolon.
+6. Record the request origin as the regional API host, including `https://` but
+   no path. For example:
+
+   ```text
+   https://eu-api-alexa.amazon.it
+   ```
+
+7. In Home Assistant, go to **Settings → Devices & services → Add
+   integration → Alexa Room Sync** and select **Cookie da HAR**.
+8. Paste the regional host and cookie. Leave **Additional headers JSON** as
+   `{}` initially. If Amazon rejects the request, copy only required extra
+   headers such as `x-amzn-alexa-app`, `User-Agent`, or `csrf`:
+
+   ```json
+   {
+     "x-amzn-alexa-app": "captured value",
+     "User-Agent": "captured value",
+     "csrf": "captured value"
+   }
+   ```
+
+   Do not add `Cookie`, `Host`, `Content-Length`, `Content-Type`, or `Accept`
+   there; Alexa Room Sync manages those headers itself.
+9. Submit the form. Alexa Room Sync immediately tests the session by reading
+   the Alexa groups. An authentication error normally means the cookie has
+   expired, the host belongs to a different Amazon region, or a required
+   captured header is missing.
+
+The standalone deletion script also asks for a skill identifier and separate
+CSRF value. Those are script-specific: Alexa Room Sync does not require a skill
+identifier during setup. Cookies expire and must be captured again when Amazon
+invalidates the session.
 
 ## Usage
 
