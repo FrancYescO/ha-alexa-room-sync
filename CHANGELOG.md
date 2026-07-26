@@ -2,6 +2,32 @@
 
 All notable changes to this project are documented in this file.
 
+## 0.8.2
+
+- Echo endpoints with one exact, unique Home Assistant entity/area match now
+  participate in normal room synchronization.
+- Alexa clients without a safe HA match remain untouched and are reported in
+  the device-room inventory.
+
+## 0.8.1
+
+- Added a full room-membership inventory for Amazon/Echo devices, including
+  expected HA area, recognized Alexa room groups, and unrelated groups.
+- Reports Amazon/Echo devices that are missing from their expected room or
+  belong to multiple recognized rooms.
+- Applies additions before removals so a failed Alexa request cannot leave an
+  endpoint temporarily without its intended room.
+
+## 0.8.0
+
+- Added Alexa room-name auditing to every synchronization preview.
+- Reports Echo/Alexa devices that belong to a room whose name differs from the
+  corresponding Home Assistant area.
+- Safely recognizes legacy Italian room names that differ only by articles or
+  prepositions, such as `Camera da letto` and `Camera Letto`.
+- Synchronization now removes mapped endpoints from these high-confidence
+  legacy room aliases while leaving unrelated Alexa groups untouched.
+
 ## 0.7.0
 
 - Added buttons to preview and delete stale Home Assistant Alexa endpoints.

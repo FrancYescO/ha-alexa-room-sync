@@ -51,6 +51,9 @@ class SyncPlan:
     unmatched_alexa: list[dict[str, str]] = field(default_factory=list)
     missing_alexa_groups: list[str] = field(default_factory=list)
     pending_additions: list[dict[str, str]] = field(default_factory=list)
+    room_name_mismatches: list[dict[str, Any]] = field(default_factory=list)
+    alexa_device_room_issues: list[dict[str, Any]] = field(default_factory=list)
+    alexa_device_room_inventory: list[dict[str, Any]] = field(default_factory=list)
     mapped_count: int = 0
 
     def as_dict(self) -> dict[str, Any]:
@@ -65,6 +68,9 @@ class SyncPlan:
             "missing_alexa_groups": groups_to_create,
             "groups_to_create": groups_to_create,
             "pending_additions": self.pending_additions,
+            "room_name_mismatches": self.room_name_mismatches,
+            "alexa_device_room_issues": self.alexa_device_room_issues,
+            "alexa_device_room_inventory": self.alexa_device_room_inventory,
             "change_count": (
                 len(groups_to_create)
                 + len(self.pending_additions)

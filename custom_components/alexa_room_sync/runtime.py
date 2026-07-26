@@ -14,7 +14,7 @@ from homeassistant.helpers import device_registry as dr
 from homeassistant.helpers import entity_registry as er
 
 from .api import AlexaRoomApi
-from .planner import HomeAssistantCandidate, build_plan
+from .planner import HomeAssistantCandidate, build_plan, build_room_audit
 
 
 @dataclass(slots=True)
@@ -31,28 +31,40 @@ class AlexaRoomSyncRuntime:
     async def async_plan(self, hass: HomeAssistant):
         """Read both systems and create a fresh plan."""
         async with self.lock:
-            endpoints, groups = await asyncio.gather(
+            all_endpoints, groups = await asyncio.gather(
                 self.api.async_list_endpoints(), self.api.async_list_groups()
             )
-            endpoints = self._filter_endpoints(endpoints)
+            endpoints = self._filter_endpoints(all_endpoints)
             candidates = collect_candidates(hass)
-            return build_plan(
+            plan = build_plan(
                 endpoints, groups, candidates, self.manual_mappings
             )
+            (
+                plan.room_name_mismatches,
+                plan.alexa_device_room_issues,
+                plan.alexa_device_room_inventory,
+            ) = build_room_audit(all_endpoints, groups, candidates)
+            return plan
 
     async def async_apply(self, hass: HomeAssistant) -> dict[str, Any]:
         """Create missing rooms, then apply membership changes serially."""
         async with self.lock:
-            endpoints, groups = await asyncio.gather(
+            all_endpoints, groups = await asyncio.gather(
                 self.api.async_list_endpoints(), self.api.async_list_groups()
             )
-            endpoints = self._filter_endpoints(endpoints)
+            endpoints = self._filter_endpoints(all_endpoints)
+            candidates = collect_candidates(hass)
             plan = build_plan(
                 endpoints,
                 groups,
-                collect_candidates(hass),
+                candidates,
                 self.manual_mappings,
             )
+            (
+                plan.room_name_mismatches,
+                plan.alexa_device_room_issues,
+                plan.alexa_device_room_inventory,
+            ) = build_room_audit(all_endpoints, groups, candidates)
             created_groups: list[str] = []
             for group_name in sorted(set(plan.missing_alexa_groups)):
                 await self.api.async_create_group(group_name)
@@ -72,12 +84,19 @@ class AlexaRoomSyncRuntime:
                 plan = build_plan(
                     endpoints,
                     groups,
-                    collect_candidates(hass),
+                    candidates,
                     self.manual_mappings,
                 )
+                (
+                    plan.room_name_mismatches,
+                    plan.alexa_device_room_issues,
+                    plan.alexa_device_room_inventory,
+                ) = build_room_audit(all_endpoints, groups, candidates)
 
             completed: list[dict[str, str]] = []
-            for operation in [*plan.removals, *plan.additions]:
+            # Add before removing so a mapped endpoint is never left without
+            # its intended room if Alexa rejects a later operation.
+            for operation in [*plan.additions, *plan.removals]:
                 await self.api.async_update_group(
                     operation.group_id,
                     operation.endpoint_id,
@@ -175,9 +194,9 @@ class AlexaRoomSyncRuntime:
             return {"deleted_count": len(deleted), "deleted": deleted}
 
     def _filter_endpoints(self, endpoints):
-        """Exclude Alexa clients/apps/hubs; keep controllable HA matches."""
+        """Exclude clients/apps/hubs while retaining room-mappable Echo devices."""
         manual_ids = set(self.manual_mappings.values())
-        excluded_categories = {"alexa_voice_enabled", "application", "hub"}
+        excluded_categories = {"application", "hub"}
         return [
             endpoint
             for endpoint in endpoints

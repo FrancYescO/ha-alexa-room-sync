@@ -19,6 +19,12 @@
 - Creates an Alexa room when a matched Home Assistant area does not exist.
 - Adds matched Alexa endpoints to their correct room.
 - Removes endpoints only from other groups whose names match HA areas.
+- Reports every Alexa group whose name does not exactly match an HA area.
+- Recognizes high-confidence Italian legacy aliases that differ only by
+  articles or prepositions (`Camera da letto` → `Camera Letto`).
+- Reports Echo/Alexa devices still assigned to one of those legacy rooms.
+- Synchronizes Echo devices when their Alexa name has one exact, unique match
+  with an Alexa Media Player entity assigned to an HA area.
 - Never modifies unrelated Alexa groups such as music or functional groups.
 - Uses the MatterHub source `entity_id` when Alexa exposes it as the endpoint
   serial number.
@@ -113,6 +119,11 @@ response_variable: preview
 The response includes:
 
 - `groups_to_create`: missing Alexa rooms;
+- `room_name_mismatches`: Alexa groups without an exact HA area name;
+- `alexa_device_room_issues`: Echo/Alexa devices found in a safely recognized
+  legacy room name;
+- `alexa_device_room_inventory`: all Amazon/Echo endpoints with their Alexa
+  room memberships, expected HA area, and alignment status;
 - `pending_additions`: endpoints waiting for room creation;
 - `additions` and `removals`: membership changes;
 - `ambiguous`: mappings intentionally blocked;

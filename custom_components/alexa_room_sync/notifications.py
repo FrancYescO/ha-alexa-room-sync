@@ -20,6 +20,21 @@ def format_preview_notification(result: dict[str, Any]) -> str:
         ("Entità da aggiungere", result.get("additions", []), _operation),
         ("Aggiunte dopo la creazione stanza", result.get("pending_additions", []), _operation),
         ("Entità da rimuovere", result.get("removals", []), _operation),
+        (
+            "Stanze Alexa con nome diverso da Home Assistant",
+            result.get("room_name_mismatches", []),
+            _room_mismatch,
+        ),
+        (
+            "Dispositivi Alexa in stanze con nome non allineato",
+            result.get("alexa_device_room_issues", []),
+            _alexa_device_room_issue,
+        ),
+        (
+            "Inventario stanze dispositivi Alexa",
+            result.get("alexa_device_room_inventory", []),
+            _alexa_device_room_inventory,
+        ),
         ("Mapping ambigui (non modificati)", result.get("ambiguous", []), _ambiguous),
         (
             "Endpoint presenti su Alexa ma non associati a Home Assistant",
@@ -135,3 +150,38 @@ def _unmatched_alexa(item: Any) -> str:
     else:
         details.append("motivo: nessun nome identico tra le entità HA con stanza")
     return f"**Alexa · {name}** — " + "; ".join(details)
+
+
+def _room_mismatch(item: Any) -> str:
+    """Describe an Alexa group whose name differs from HA."""
+    if not isinstance(item, dict):
+        return str(item)
+    name = item.get("alexa_group_name") or "Gruppo senza nome"
+    suggested = item.get("suggested_ha_area")
+    members = int(item.get("member_count", 0))
+    if suggested:
+        return f"**{name}** → possibile area HA **{suggested}**; membri: {members}"
+    return f"**{name}** — nessuna corrispondenza sicura; membri: {members}"
+
+
+def _alexa_device_room_issue(item: Any) -> str:
+    """Describe an Echo/Alexa device in a mismatched room."""
+    if not isinstance(item, dict):
+        return str(item)
+    return (
+        f"**{item.get('endpoint_name') or 'Dispositivo Alexa'}**: "
+        f"{item.get('current_alexa_group') or 'stanza sconosciuta'} → "
+        f"{item.get('expected_ha_area') or 'area sconosciuta'}"
+    )
+
+
+def _alexa_device_room_inventory(item: Any) -> str:
+    """Describe the room assignment of one Amazon/Alexa device."""
+    if not isinstance(item, dict):
+        return str(item)
+    rooms = ", ".join(item.get("alexa_room_groups", [])) or "nessuna stanza"
+    expected = item.get("expected_ha_area") or "nessuna corrispondenza HA"
+    return (
+        f"**{item.get('endpoint_name') or 'Dispositivo Alexa'}** — "
+        f"Alexa: {rooms}; HA: {expected}; stato: {item.get('status', 'sconosciuto')}"
+    )
