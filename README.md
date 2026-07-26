@@ -44,7 +44,7 @@
 
 - Home Assistant 2026.3 or newer.
 - Devices already exposed to Alexa, for example through
-  [Home Assistant Matter Hub](https://github.com/t0bst4r/home-assistant-matter-hub).
+  [Home Assistant Matter Hub](https://github.com/RiDDiX/home-assistant-matter-hub/).
 - Recommended: a working
   [Alexa Media Player](https://github.com/alandtse/alexa_media_player)
   configuration for shared authentication.
