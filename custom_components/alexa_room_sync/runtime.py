@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import asyncio
 import json
+import re
 import time
 from dataclasses import dataclass, field
 from typing import Any
@@ -118,7 +119,9 @@ class AlexaRoomSyncRuntime:
     async def async_stale_endpoints(self, hass: HomeAssistant) -> list[dict[str, Any]]:
         """Return deletable Home Assistant endpoints no longer present in HA."""
         async with self.lock:
-            endpoints = self._filter_endpoints(await self.api.async_list_endpoints())
+            endpoints = self._filter_cleanup_endpoints(
+                await self.api.async_list_endpoints()
+            )
             return _find_stale_home_assistant_endpoints(hass, endpoints)
 
     async def async_prepare_stale_cleanup(
@@ -126,7 +129,9 @@ class AlexaRoomSyncRuntime:
     ) -> list[dict[str, Any]]:
         """Find stale endpoints and arm one guarded deletion attempt."""
         async with self.lock:
-            endpoints = self._filter_endpoints(await self.api.async_list_endpoints())
+            endpoints = self._filter_cleanup_endpoints(
+                await self.api.async_list_endpoints()
+            )
             stale = _find_stale_home_assistant_endpoints(hass, endpoints)
             self.cleanup_candidate_ids = tuple(item["endpoint_id"] for item in stale)
             self.cleanup_prepared_at = time.monotonic()
@@ -156,7 +161,9 @@ class AlexaRoomSyncRuntime:
             if not requested:
                 return {"deleted_count": 0, "deleted": []}
 
-            endpoints = self._filter_endpoints(await self.api.async_list_endpoints())
+            endpoints = self._filter_cleanup_endpoints(
+                await self.api.async_list_endpoints()
+            )
             stale = _find_stale_home_assistant_endpoints(hass, endpoints)
             stale_by_id = {item["endpoint_id"]: item for item in stale}
             rejected = [item for item in requested if item not in stale_by_id]
@@ -177,7 +184,9 @@ class AlexaRoomSyncRuntime:
     ) -> dict[str, Any]:
         """Delete explicitly selected endpoints after revalidating every guard."""
         async with self.lock:
-            endpoints = self._filter_endpoints(await self.api.async_list_endpoints())
+            endpoints = self._filter_cleanup_endpoints(
+                await self.api.async_list_endpoints()
+            )
             stale = _find_stale_home_assistant_endpoints(hass, endpoints)
             stale_by_id = {item["endpoint_id"]: item for item in stale}
             requested = list(dict.fromkeys(endpoint_ids))
@@ -194,14 +203,26 @@ class AlexaRoomSyncRuntime:
             return {"deleted_count": len(deleted), "deleted": deleted}
 
     def _filter_endpoints(self, endpoints):
-        """Exclude clients/apps/hubs while retaining room-mappable Echo devices."""
+        """Keep configured models, Echo devices, and explicit mappings."""
         manual_ids = set(self.manual_mappings.values())
-        excluded_categories = {"application", "hub"}
+        managed_models = {item.casefold() for item in self.endpoint_models}
         return [
             endpoint
             for endpoint in endpoints
             if endpoint.endpoint_id in manual_ids
-            or (endpoint.category or "").casefold() not in excluded_categories
+            or (endpoint.category or "").casefold() == "alexa_voice_enabled"
+            or (endpoint.manufacturer or "").casefold() == "amazon"
+            or (endpoint.model or "").casefold() in managed_models
+        ]
+
+    @staticmethod
+    def _filter_cleanup_endpoints(endpoints):
+        """Exclude Alexa clients and hubs from the guarded cleanup inventory."""
+        excluded_categories = {"application", "hub"}
+        return [
+            endpoint
+            for endpoint in endpoints
+            if (endpoint.category or "").casefold() not in excluded_categories
         ]
 
 
@@ -284,7 +305,7 @@ def _find_stale_home_assistant_endpoints(
         if (
             (endpoint.manufacturer or "").casefold() != "home assistant"
             or endpoint.source_provider != "SKILL"
-            or not entity_id
+            or not _is_home_assistant_entity_id(entity_id)
             or not endpoint.appliance_id
             or entity_registry.async_get(entity_id) is not None
             or hass.states.get(entity_id) is not None
@@ -302,3 +323,8 @@ def _find_stale_home_assistant_endpoints(
             }
         )
     return sorted(stale, key=lambda item: (item["entity_id"], item["endpoint_id"]))
+
+
+def _is_home_assistant_entity_id(value: str | None) -> bool:
+    """Return whether a value is unambiguously a Home Assistant entity ID."""
+    return bool(value and re.fullmatch(r"[a-z_]+\.[a-z0-9_]+", value))

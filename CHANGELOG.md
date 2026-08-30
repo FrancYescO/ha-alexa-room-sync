@@ -2,6 +2,17 @@
 
 All notable changes to this project are documented in this file.
 
+## 0.8.3
+
+- Restricted automatic synchronization to configured endpoint models, Echo
+  devices, Amazon-manufactured devices, and explicit manual mappings.
+- Hardened stale-endpoint deletion so only unambiguous Home Assistant
+  `entity_id` sources can be classified as obsolete.
+- Preferred an entity ID extracted from the Home Assistant endpoint description
+  over an opaque Alexa serial number.
+- Fixed HACS validation checkout and pinned GitHub Actions to exact revisions.
+- Added runtime and API regression coverage for endpoint filtering and cleanup.
+
 ## 0.8.2
 
 - Echo endpoints with one exact, unique Home Assistant entity/area match now

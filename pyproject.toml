@@ -4,7 +4,7 @@ build-backend = "setuptools.build_meta"
 
 [project]
 name = "alexa-room-sync"
-version = "0.8.2"
+version = "0.8.3"
 description = "Synchronize Home Assistant areas and Alexa rooms."
 readme = "README.md"
 requires-python = ">=3.13"

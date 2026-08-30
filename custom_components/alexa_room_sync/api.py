@@ -216,6 +216,8 @@ class AlexaRoomApi:
 
         if isinstance(result, list):
             result = result[0] if result else {}
+        if not isinstance(result, Mapping):
+            raise AlexaApiError("Risposta GraphQL non valida")
         if result.get("errors"):
             messages = "; ".join(
                 str(item.get("message", "Errore GraphQL"))
@@ -261,15 +263,17 @@ class AlexaRoomApi:
                 description_value.get("text") or legacy.get("friendlyDescription")
             )
             serial_text = serial_number_value.get("text")
+            description_entity_id = _entity_id_from_description(description_text)
             endpoints.append(
                 AlexaEndpoint(
                     endpoint_id=endpoint_id,
                     name=name,
                     category=primary_category.get("value"),
                     model=model_value.get("text") or legacy.get("modelName"),
-                    source_entity_id=(
-                        serial_text or _entity_id_from_description(description_text)
-                    ),
+                    # A Home Assistant description is stronger evidence than
+                    # an opaque Alexa serial number. MatterHub endpoints still
+                    # fall back to their entity_id-shaped serial.
+                    source_entity_id=description_entity_id or serial_text,
                     manufacturer=(
                         manufacturer_value.get("text")
                         or legacy.get("manufacturerName")

@@ -34,6 +34,8 @@
   serial number.
 - Falls back to conservative normalized-name matching.
 - Blocks duplicate names, duplicate groups, and multi-area ambiguity.
+- Limits smart-home synchronization to configured endpoint models; Echo/Amazon
+  devices and explicit manual mappings remain eligible.
 - Provides a read-only preview before applying changes.
 - Exposes Verify, Synchronize, stale-endpoint preview, and guarded cleanup buttons.
 - Publishes persistent notifications with verification differences and sync results.
@@ -232,6 +234,10 @@ endpoint belongs to the Home Assistant skill, exposes a source HA `entity_id`,
 has a legacy Alexa appliance identifier, and that the entity no longer exists
 in either the HA entity registry or state machine. Active or unrelated devices
 are rejected.
+
+For safety, opaque Alexa serial numbers are never accepted as proof that a Home
+Assistant entity was removed. Cleanup requires an unambiguous
+`domain.object_id` source identifier.
 
 ## Matching and safety model
 
