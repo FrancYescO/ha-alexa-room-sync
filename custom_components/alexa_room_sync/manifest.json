@@ -1,8 +1,16 @@
 {
   "domain": "alexa_room_sync",
   "name": "Alexa Room Sync",
-  "after_dependencies": ["alexa_media"],
-  "codeowners": ["@FrancYescO"],
+  "after_dependencies": [
+    "alexa",
+    "alexa_devices",
+    "alexa_media",
+    "cloud",
+    "logbook"
+  ],
+  "codeowners": [
+    "@FrancYescO"
+  ],
   "config_flow": true,
   "documentation": "https://github.com/FrancYescO/ha-alexa-room-sync",
   "integration_type": "service",
@@ -10,5 +18,5 @@
   "issue_tracker": "https://github.com/FrancYescO/ha-alexa-room-sync/issues",
   "requirements": [],
   "single_config_entry": true,
-  "version": "0.8.3"
+  "version": "0.9.0"
 }

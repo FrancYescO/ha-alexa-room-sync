@@ -30,6 +30,15 @@
 - Synchronizes Echo devices when their Alexa name has one exact, unique match
   with an Alexa Media Player entity assigned to an HA area.
 - Never modifies unrelated Alexa groups such as music or functional groups.
+- Synchronizes one area or the whole house, with a persistent area selector.
+- Optionally creates floor groups, with lights and switches only by default.
+- Tracks managed groups by stable HA area/floor IDs, follows renames, and retires
+  obsolete groups after a guarded waiting period while preserving manual members.
+- Offers opt-in automatic sync (60-second debounce plus hourly reconciliation).
+- Supports HA entity aliases and account-scoped Echo serial-number matching.
+- Provides configurable area exclusions, group prefixes, climate/child-lock filters,
+  HA Cloud matching, and optional rate-limited resend of missing Cloud devices.
+- Exposes a persistent last-result sensor, Activity entries, and redacted diagnostics.
 - Uses the MatterHub source `entity_id` when Alexa exposes it as the endpoint
   serial number.
 - Falls back to conservative normalized-name matching.
@@ -39,7 +48,7 @@
 - Provides a read-only preview before applying changes.
 - Exposes Verify, Synchronize, stale-endpoint preview, and guarded cleanup buttons.
 - Publishes persistent notifications with verification differences and sync results.
-- Reuses the live authentication from Alexa Media Player when available.
+- Reuses live authentication from Alexa Devices or Alexa Media Player.
 - Supports a captured HAR cookie as an independent fallback.
 
 ## Requirements
@@ -47,7 +56,7 @@
 - Home Assistant 2026.3 or newer.
 - Devices already exposed to Alexa, for example through
   [Home Assistant Matter Hub](https://github.com/RiDDiX/home-assistant-matter-hub/).
-- Recommended: a working
+- A working built-in **Alexa Devices** account or
   [Alexa Media Player](https://github.com/alandtse/alexa_media_player)
   configuration for shared authentication.
 
@@ -72,7 +81,15 @@ Copy `custom_components/alexa_room_sync` into the Home Assistant
 
 ## Authentication
 
-### Alexa Media Player — recommended
+### Alexa Devices
+
+The built-in Home Assistant **Alexa Devices** integration is supported. Select
+its loaded account during setup; Alexa Room Sync borrows the current authenticated
+HTTP wrapper without storing a second password. The regional API host must match
+your Amazon account. Like the Alexa Media Player adapter, this uses private
+integration interfaces and may need updates when Home Assistant changes them.
+
+### Alexa Media Player
 
 Alexa Room Sync follows the same runtime-sharing pattern used by companion
 integrations such as SmartThings Extra. It obtains the loaded Alexa Media
@@ -158,7 +175,16 @@ invalidates the session.
 
 ## Usage
 
-The integration creates four button entities on its device:
+Synchronization starts in **preview-only mode**, including after upgrading an
+existing installation. In **Configure**, turn off **Preview only** and enable
+**I understand synchronization can create, rename and delete managed Alexa groups**
+to allow synchronization writes. Stale-endpoint deletion has its own existing
+preview/confirmation flow and is independent of these synchronization options.
+
+The integration creates six button entities on its device:
+
+- **One area: preview** and **One area: synchronize** use the persistent
+  **Area to synchronize** selector. The selector follows area renames.
 
 - **Verify synchronization** performs a read-only comparison and creates a
   persistent Home Assistant notification listing all differences and blocked
@@ -193,7 +219,7 @@ The response includes:
 - `unmatched_alexa`: endpoints without an HA match;
 - `change_count`: total planned changes.
 
-Apply the plan:
+Apply a fresh plan (or return a preview when writes are disabled):
 
 ```yaml
 action: alexa_room_sync.apply
@@ -203,6 +229,93 @@ response_variable: result
 Alexa Room Sync rereads both systems immediately before applying, creates
 missing rooms, rereads the Alexa-assigned group IDs, and then performs
 membership updates serially. It emits `alexa_room_sync_finished` when done.
+
+### Settings and automatic synchronization
+
+| Option | Default | Behavior |
+|---|---|---|
+| Preview only / allow writes | On / Off | Both gates must allow writes. |
+| Automatic sync | Off | Runs 60 seconds after registry changes and hourly; respects write gates. |
+| Include Echo devices | On | Stable serial matching when the authenticated account is known; conservative name matching remains available. |
+| Floor groups | Off | Includes devices from synced areas; Echos remain in area groups. |
+| Floor lights and switches only | On | Excludes climate and other domains from floor commands. |
+| Climate / child-lock switches | On / Off | Controls membership eligibility. |
+| HA Cloud devices | Off | Adds explicitly exposed HA skill devices alongside MatterHub. |
+| Resend missing Cloud devices | Off | Requires Cloud matching; waits 10 minutes, then sends add-or-update reports at most hourly. Never toggles exposure. |
+| Group prefix | Empty | Applies to area and floor names. |
+| Areas to skip | Empty | Excludes areas from whole-house and floor sync; retires their tracked groups. |
+
+HA Cloud matching is optional: MatterHub installations do not need HA Cloud.
+A failure to read Cloud exposure settings blocks synchronization instead of
+interpreting the failure as an empty inventory.
+
+Sync one area with the selected HA area ID:
+
+```yaml
+action: alexa_room_sync.sync_area
+data:
+  area_id: kitchen
+response_variable: result
+```
+
+`preview` and `apply` also accept an optional `area_id`. A scoped sync changes
+only that area's group; it can explicitly target a skipped area and never updates
+floor groups or removes membership from another area. A later whole-house sync
+reconciles moves between areas and updates floors. Matching still considers the
+whole house so narrowing the scope cannot hide ambiguous names.
+
+The **Last result** sensor persists the latest outcome and detailed result across
+restarts. Applied changes also appear in Activity. Diagnostics omit credentials,
+account identifiers, serials and device names. Use **Reconfigure** to change the
+session, host, endpoint models or explicit mappings.
+
+### Managed group lifecycle
+
+The ownership ledger lives in `.storage/alexa_room_sync.<entry_id>.groups`.
+Groups created by the integration, and uniquely named existing groups matching a
+desired area/floor, are tracked by stable registry ID. Only proven matching members
+are adopted; other manually added members remain untouched. A rename updates the
+existing group rather than recreating it.
+
+A tracked group whose area/floor is removed, excluded, or no longer has eligible
+matched devices is marked for retirement on a write-enabled run. Deletion or
+release requires a later write-enabled run at least **15 minutes** afterward.
+Previews never arm retirement. More than three retirements in a run, or at least
+half of six or more managed groups, blocks all retirements for that run. Groups
+with manual members are released after managed members are removed, preserving
+the group and manual devices. Alexa routines referencing a deleted group can break.
+
+To retire all tracked groups explicitly:
+
+```yaml
+action: alexa_room_sync.remove_managed_groups
+data:
+  confirm: true
+response_variable: result
+```
+
+This action respects the same write gates, waiting period and bulk-removal guard.
+For a large installation, retire areas in smaller batches using the exclusion
+option, rather than bypassing the guard. Removing the integration only deletes its
+local ledger; it never writes to Alexa.
+
+Empty Alexa inventories, missing tracked group IDs, name collisions and ambiguous
+mappings block unsafe operations. Successful writes are saved incrementally. If
+creation succeeds but its ID is not yet visible, a pending record prevents duplicate
+creation; a later preview can recover the newly assigned ID. If identity cannot be
+proven, the group remains blocked for inspection.
+
+If a failed create never produced a group, or a tracked group was deliberately
+removed outside the integration, use `alexa_room_sync.forget_missing_groups` with
+`confirm: true` and an explicit `group_keys` list copied from `group_actions.key`
+in the preview. This resets only the selected local records, after rereading Alexa
+and proving neither the saved ID nor name is present. It never modifies Alexa; the
+next enabled sync can create the required group again. Do not reset tracking while
+a newly created group is still propagating through Amazon's API.
+
+Group rename/delete uses the Phoenix API only after establishing its relationship
+to the GraphQL group, by identical ID or unique name plus a complete matching
+membership inventory. An unprovable cross-API identity blocks the operation.
 
 ### Cleaning stale Home Assistant skill endpoints
 
@@ -215,7 +328,7 @@ action: alexa_room_sync.cleanup_preview
 response_variable: cleanup
 ```
 
-Deletion is never part of room synchronization. In the UI, first press
+Stale-endpoint deletion is never part of room synchronization. In the UI, first press
 **Verify stale endpoints**, inspect its notification, then press **Delete stale
 endpoints** within 10 minutes. The action API also allows deleting an explicit
 selection by copying only the desired `endpoint_id` values from the preview:
@@ -255,7 +368,9 @@ items remain untouched and can be resolved using an explicit
 - The Alexa GraphQL API is private and may change without notice.
 - Alexa Media Player is itself an unofficial integration.
 - Alexa may take a few seconds to expose a newly created group.
-- This release does not rename or delete Alexa groups.
+- Rename/delete requires a provable GraphQL-to-Phoenix group identity; some account/API shapes may be blocked.
+- A duplicate or ambiguous identity is reported rather than guessed.
+- Native Amazon API behavior still needs validation against each regional account.
 - Authentication and API behavior may differ between Amazon regions.
 
 ## Development
@@ -263,6 +378,8 @@ items remain untouched and can be resolved using an explicit
 ```bash
 python -m compileall custom_components/alexa_room_sync
 pytest -q
+# Optional end-to-end smoke test with real Home Assistant (Python 3.14+):
+python tests/ha_smoke.py
 ```
 
 Pull requests are welcome. Please avoid including cookies, HAR files, email
@@ -271,6 +388,10 @@ addresses, endpoint IDs, or other account-specific data in tests and reports.
 The early Git history was reconstructed from preserved release archives. See
 [HISTORY.md](HISTORY.md) for provenance and limitations.
 
-## License
+## Credits and license
+
+Additional functionality was informed by
+[scyto/ha-alexa-group-sync](https://github.com/scyto/ha-alexa-group-sync).
+Adapted code and its upstream MIT notice are documented in [NOTICE](NOTICE).
 
 [MIT](LICENSE)

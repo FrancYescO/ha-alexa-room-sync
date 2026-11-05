@@ -38,3 +38,19 @@ def get_alexa_media_login(
     if login_obj is None:
         return None
     return entry_id, login_obj
+
+
+def alexa_devices_accounts(hass: HomeAssistant) -> dict[str, str]:
+    """Core Alexa Devices accounts exposing the authenticated API wrapper."""
+    return {
+        entry.entry_id: entry.title
+        for entry in hass.config_entries.async_entries("alexa_devices")
+        if entry.state is config_entries.ConfigEntryState.LOADED
+        and getattr(getattr(entry, "runtime_data", None), "api", None) is not None
+    }
+
+
+def get_alexa_devices_api(hass: HomeAssistant, entry_id: str):
+    if entry_id not in alexa_devices_accounts(hass):
+        raise RuntimeError("Alexa Devices non è caricato o richiede autenticazione")
+    return hass.config_entries.async_get_entry(entry_id).runtime_data.api

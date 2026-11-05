@@ -6,8 +6,8 @@ import json
 from urllib.parse import urlparse
 
 import voluptuous as vol
-
 from homeassistant import config_entries
+from homeassistant.core import callback
 from homeassistant.data_entry_flow import FlowResult
 from homeassistant.helpers.aiohttp_client import async_get_clientsession
 from homeassistant.helpers.selector import (
@@ -17,10 +17,17 @@ from homeassistant.helpers.selector import (
 )
 
 from .api import AlexaApiError, AlexaAuthError, AlexaRoomApi
-from .auth import alexa_media_accounts, get_alexa_media_login
+from .auth import (
+    alexa_devices_accounts,
+    alexa_media_accounts,
+    get_alexa_devices_api,
+    get_alexa_media_login,
+)
 from .const import (
+    AUTH_ALEXA_DEVICES,
     AUTH_ALEXA_MEDIA,
     AUTH_COOKIE,
+    CONF_ALEXA_DEVICES_ENTRY_ID,
     CONF_ALEXA_MEDIA_ENTRY_ID,
     CONF_AUTH_METHOD,
     CONF_COOKIE,
@@ -28,8 +35,9 @@ from .const import (
     CONF_HEADERS_JSON,
     CONF_HOST,
     CONF_MANUAL_MAPPINGS_JSON,
-    DEFAULT_HOST,
     DEFAULT_ENDPOINT_MODELS_JSON,
+    DEFAULT_HOST,
+    DEFAULT_OPTIONS,
     DOMAIN,
 )
 from .runtime import parse_string_list, parse_string_mapping
@@ -66,12 +74,14 @@ class AlexaRoomSyncConfigFlow(config_entries.ConfigFlow, domain=DOMAIN):
 
     VERSION = 1
 
-    async def async_step_user(
-        self, user_input: dict | None = None
-    ) -> FlowResult:
+    async def async_step_user(self, user_input: dict | None = None) -> FlowResult:
         """Configure and validate a captured Alexa session."""
         errors: dict[str, str] = {}
+        reconfigure = self.context.get("source") == "reconfigure"
+        if reconfigure and user_input is not None:
+            user_input = {**self._get_reconfigure_entry().data, **user_input}
         accounts = alexa_media_accounts(self.hass)
+        devices_accounts = alexa_devices_accounts(self.hass)
         if user_input is not None:
             try:
                 if not _valid_host(user_input[CONF_HOST]):
@@ -83,7 +93,18 @@ class AlexaRoomSyncConfigFlow(config_entries.ConfigFlow, domain=DOMAIN):
                 errors["base"] = "invalid_json"
             if not errors:
                 auth_method = user_input[CONF_AUTH_METHOD]
-                if auth_method == AUTH_ALEXA_MEDIA:
+                if auth_method == AUTH_ALEXA_DEVICES:
+                    devices_id = user_input.get(CONF_ALEXA_DEVICES_ENTRY_ID)
+                    if devices_id not in devices_accounts:
+                        errors["base"] = "alexa_devices_unavailable"
+                        api = None
+                    else:
+                        api = AlexaRoomApi.from_alexa_devices(
+                            lambda: get_alexa_devices_api(self.hass, devices_id),
+                            user_input[CONF_HOST],
+                            headers,
+                        )
+                elif auth_method == AUTH_ALEXA_MEDIA:
                     resolved = get_alexa_media_login(
                         self.hass, user_input.get(CONF_ALEXA_MEDIA_ENTRY_ID)
                     )
@@ -116,18 +137,31 @@ class AlexaRoomSyncConfigFlow(config_entries.ConfigFlow, domain=DOMAIN):
                 except AlexaApiError:
                     errors["base"] = "cannot_connect"
                 else:
-                    await self.async_set_unique_id("account")
-                    self._abort_if_unique_id_configured()
                     data = dict(user_input)
                     data[CONF_HEADERS_JSON] = json.dumps(headers)
+                    if auth_method == AUTH_ALEXA_DEVICES:
+                        data.pop(CONF_COOKIE, None)
                     if auth_method == AUTH_ALEXA_MEDIA:
                         data[CONF_ALEXA_MEDIA_ENTRY_ID] = alexa_media_entry_id
                         data.pop(CONF_COOKIE, None)
-                    return self.async_create_entry(
-                        title="Alexa Room Sync", data=data
-                    )
+                    if reconfigure:
+                        return self.async_update_reload_and_abort(
+                            self._get_reconfigure_entry(), data=data
+                        )
+                    await self.async_set_unique_id("account")
+                    self._abort_if_unique_id_configured()
+                    return self.async_create_entry(title="Alexa Room Sync", data=data)
 
         return self._show_form(user_input, accounts, errors)
+
+    async def async_step_reconfigure(self, user_input=None):
+        if user_input is not None:
+            return await self.async_step_user(user_input)
+        return self._show_form(
+            dict(self._get_reconfigure_entry().data),
+            alexa_media_accounts(self.hass),
+            {},
+        )
 
     def _show_form(
         self,
@@ -142,7 +176,16 @@ class AlexaRoomSyncConfigFlow(config_entries.ConfigFlow, domain=DOMAIN):
                 AUTH_ALEXA_MEDIA: "Alexa Media Player (consigliato)",
                 **auth_options,
             }
-        default_auth = AUTH_ALEXA_MEDIA if accounts else AUTH_COOKIE
+        devices_accounts = alexa_devices_accounts(self.hass)
+        if devices_accounts:
+            auth_options = {AUTH_ALEXA_DEVICES: "Alexa Devices", **auth_options}
+        default_auth = (
+            AUTH_ALEXA_DEVICES
+            if devices_accounts
+            else AUTH_ALEXA_MEDIA
+            if accounts
+            else AUTH_COOKIE
+        )
         fields: dict = {
             vol.Required(
                 CONF_AUTH_METHOD,
@@ -158,6 +201,15 @@ class AlexaRoomSyncConfigFlow(config_entries.ConfigFlow, domain=DOMAIN):
                     ),
                 )
             ] = vol.In(accounts)
+        if devices_accounts:
+            fields[
+                vol.Required(
+                    CONF_ALEXA_DEVICES_ENTRY_ID,
+                    default=(user_input or {}).get(
+                        CONF_ALEXA_DEVICES_ENTRY_ID, next(iter(devices_accounts))
+                    ),
+                )
+            ] = vol.In(devices_accounts)
         fields.update(
             {
                 vol.Required(
@@ -165,9 +217,7 @@ class AlexaRoomSyncConfigFlow(config_entries.ConfigFlow, domain=DOMAIN):
                     default=(user_input or {}).get(CONF_HOST, DEFAULT_HOST),
                 ): str,
                 vol.Optional(CONF_COOKIE): TextSelector(
-                    TextSelectorConfig(
-                        type=TextSelectorType.PASSWORD, multiline=True
-                    )
+                    TextSelectorConfig(type=TextSelectorType.PASSWORD, multiline=True)
                 ),
                 vol.Optional(
                     CONF_HEADERS_JSON,
@@ -181,15 +231,40 @@ class AlexaRoomSyncConfigFlow(config_entries.ConfigFlow, domain=DOMAIN):
                 ): TextSelector(TextSelectorConfig(multiline=True)),
                 vol.Optional(
                     CONF_MANUAL_MAPPINGS_JSON,
-                    default=(user_input or {}).get(
-                        CONF_MANUAL_MAPPINGS_JSON, "{}"
-                    ),
+                    default=(user_input or {}).get(CONF_MANUAL_MAPPINGS_JSON, "{}"),
                 ): TextSelector(TextSelectorConfig(multiline=True)),
             }
         )
-        schema = vol.Schema(
-            fields
-        )
+        schema = vol.Schema(fields)
+        return self.async_show_form(step_id="user", data_schema=schema, errors=errors)
+
+    @staticmethod
+    @callback
+    def async_get_options_flow(config_entry):
+        return AlexaRoomSyncOptionsFlow()
+
+
+class AlexaRoomSyncOptionsFlow(config_entries.OptionsFlow):
+    """Runtime controls; writes remain disabled until explicitly configured."""
+
+    async def async_step_init(self, user_input=None):
+        from homeassistant.helpers.selector import AreaSelector, AreaSelectorConfig
+
+        errors = {}
+        if user_input is not None:
+            if user_input.get("resend_missing") and not user_input.get("cloud_devices"):
+                errors["base"] = "cloud_required"
+            else:
+                return self.async_create_entry(title="", data=user_input)
+        current = {**DEFAULT_OPTIONS, **self.config_entry.options, **(user_input or {})}
+        fields = {}
+        for name, default in DEFAULT_OPTIONS.items():
+            value = current[name]
+            if name == "excluded_areas":
+                selector = AreaSelector(AreaSelectorConfig(multiple=True))
+            else:
+                selector = bool if isinstance(default, bool) else str
+            fields[vol.Required(name, default=value)] = selector
         return self.async_show_form(
-            step_id="user", data_schema=schema, errors=errors
+            step_id="init", data_schema=vol.Schema(fields), errors=errors
         )

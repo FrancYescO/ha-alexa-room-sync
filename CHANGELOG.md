@@ -2,6 +2,23 @@
 
 All notable changes to this project are documented in this file.
 
+## 0.9.0
+
+- Add preview-gated area and whole-house synchronization, persistent area selection,
+  last-result sensor, Activity reporting and redacted diagnostics.
+- Add HA entity aliases, account-scoped Echo serial matching, and live Alexa Devices
+  authentication alongside Alexa Media Player and captured cookies.
+- Add optional floor groups, area exclusions, group prefixes, climate/child-lock
+  filters and debounced/hourly automatic sync.
+- Add opt-in HA Cloud exposure matching and rate-limited missing-device resend.
+- Persist area/floor group ownership; follow renames and guard retirement with a
+  15-minute delay, bulk-removal limits and preservation of manual members.
+- Preserve MatterHub matching, Italian legacy-room migration and guarded stale
+  endpoint cleanup. Save partial writes and block duplicate group creation retries.
+- Synchronization writes now default to disabled, including on upgrade; enable
+  them explicitly in Configure. Stale-endpoint cleanup retains its separate consent.
+- Include upstream attribution in NOTICE and expand safety/compatibility tests.
+
 ## 0.8.3
 
 - Restricted automatic synchronization to configured endpoint models, Echo

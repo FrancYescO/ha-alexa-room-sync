@@ -24,6 +24,14 @@ _LOGGER = logging.getLogger(__name__)
 
 BUTTONS = (
     ButtonEntityDescription(
+        key="verify_area",
+        translation_key="verify_area",
+        icon="mdi:clipboard-search-outline",
+    ),
+    ButtonEntityDescription(
+        key="sync_area", translation_key="sync_area", icon="mdi:sync"
+    ),
+    ButtonEntityDescription(
         key="verify",
         translation_key="verify",
         icon="mdi:clipboard-search-outline",
@@ -47,10 +55,14 @@ BUTTONS = (
 
 
 async def async_setup_entry(
-    hass, entry: AlexaRoomSyncConfigEntry, async_add_entities: AddConfigEntryEntitiesCallback
+    hass,
+    entry: AlexaRoomSyncConfigEntry,
+    async_add_entities: AddConfigEntryEntitiesCallback,
 ) -> None:
     """Set up Alexa Room Sync buttons."""
-    async_add_entities(AlexaRoomSyncButton(entry, description) for description in BUTTONS)
+    async_add_entities(
+        AlexaRoomSyncButton(entry, description) for description in BUTTONS
+    )
 
 
 class AlexaRoomSyncButton(ButtonEntity):
@@ -76,15 +88,31 @@ class AlexaRoomSyncButton(ButtonEntity):
     async def async_press(self) -> None:
         """Run the selected action and publish its result."""
         try:
-            if self.entity_description.key == "verify":
-                result = (await self._entry.runtime_data.async_plan(self.hass)).as_dict()
+            key = self.entity_description.key
+            area_id = None
+            if key in ("verify_area", "sync_area"):
+                area_id = self._entry.runtime_data.selected_area
+                if not area_id:
+                    raise ValueError("Seleziona prima un'area")
+            if key in ("verify", "verify_area"):
+                result = (
+                    await self._entry.runtime_data.async_plan(self.hass, area_id)
+                ).as_dict()
                 message = format_preview_notification(result)
                 title = "Alexa Room Sync · Verifica"
-            elif self.entity_description.key == "sync":
-                result = await self._entry.runtime_data.async_apply(self.hass)
+            elif key in ("sync", "sync_area"):
+                result = await self._entry.runtime_data.async_apply(self.hass, area_id)
                 self.hass.bus.async_fire(EVENT_SYNC_FINISHED, result)
-                message = format_sync_notification(result)
-                title = "Alexa Room Sync · Sincronizzazione"
+                message = (
+                    format_preview_notification(result)
+                    if result.get("mode") == "preview"
+                    else format_sync_notification(result)
+                )
+                title = "Alexa Room Sync · " + (
+                    "Anteprima (scritture disabilitate)"
+                    if result.get("mode") == "preview"
+                    else "Sincronizzazione"
+                )
             elif self.entity_description.key == "cleanup":
                 stale = await self._entry.runtime_data.async_prepare_stale_cleanup(
                     self.hass
@@ -92,10 +120,8 @@ class AlexaRoomSyncButton(ButtonEntity):
                 message = format_cleanup_preview_notification(stale)
                 title = "Alexa Room Sync · Endpoint obsoleti"
             else:
-                result = (
-                    await self._entry.runtime_data.async_delete_prepared_stale_endpoints(
-                        self.hass
-                    )
+                result = await self._entry.runtime_data.async_delete_prepared_stale_endpoints(
+                    self.hass
                 )
                 message = format_cleanup_delete_notification(result)
                 title = "Alexa Room Sync · Pulizia completata"

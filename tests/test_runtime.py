@@ -4,8 +4,8 @@ from __future__ import annotations
 
 from types import SimpleNamespace
 
-from custom_components.alexa_room_sync.models import AlexaEndpoint
 from custom_components.alexa_room_sync import runtime
+from custom_components.alexa_room_sync.models import AlexaEndpoint
 
 
 class _Registry:

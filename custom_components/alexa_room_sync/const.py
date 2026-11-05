@@ -2,7 +2,24 @@
 
 DOMAIN = "alexa_room_sync"
 
-PLATFORMS = ["button"]
+PLATFORMS = ["button", "select", "sensor"]
+
+AUTH_ALEXA_DEVICES = "alexa_devices"
+CONF_ALEXA_DEVICES_ENTRY_ID = "alexa_devices_entry_id"
+DEFAULT_OPTIONS = {
+    "dry_run": True,
+    "allow_writes": False,
+    "auto_sync": False,
+    "include_echos": True,
+    "floor_groups": False,
+    "floor_lights_only": True,
+    "include_climate": True,
+    "include_child_locks": False,
+    "cloud_devices": False,
+    "resend_missing": False,
+    "group_prefix": "",
+    "excluded_areas": [],
+}
 
 CONF_COOKIE = "cookie"
 CONF_AUTH_METHOD = "auth_method"

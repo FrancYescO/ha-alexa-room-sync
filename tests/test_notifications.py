@@ -11,9 +11,7 @@ def test_preview_notification_lists_differences() -> None:
         {
             "change_count": 2,
             "groups_to_create": ["Studio"],
-            "pending_additions": [
-                {"endpoint_name": "Lampada", "group_name": "Studio"}
-            ],
+            "pending_additions": [{"endpoint_name": "Lampada", "group_name": "Studio"}],
             "ambiguous": [{"entity_id": "light.tavolo", "reason": "duplicate"}],
         }
     )
@@ -61,3 +59,33 @@ def test_preview_notification_identifies_unmatched_as_alexa_side() -> None:
     assert "modello: MatterHub" in message
     assert "`switch.presa_3`" in message
     assert "senza stanza" in message
+
+
+def test_held_retirement_does_not_claim_the_configuration_is_clean():
+    message = format_preview_notification(
+        {
+            "change_count": 0,
+            "group_actions": [
+                {
+                    "kind": "delete",
+                    "name": "Kitchen",
+                    "held": True,
+                    "reason": "removal_grace_period",
+                }
+            ],
+        }
+    )
+    assert "già sincronizzata" not in message
+    assert "15 minuti" in message and "Kitchen" in message
+
+
+def test_group_lifecycle_operations_have_human_readable_labels():
+    message = format_sync_notification(
+        {
+            "applied_change_count": 1,
+            "completed": [
+                {"operation": "RENAME", "group_name": "Dining", "endpoint_name": ""}
+            ],
+        }
+    )
+    assert "Gruppo rinominato: Dining" in message

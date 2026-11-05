@@ -5,10 +5,20 @@ capabilities:
 preview:
   name: Anteprima sincronizzazione
   description: Calcola le modifiche senza modificare alcun gruppo Alexa.
+  fields:
+    area_id:
+      name: Area (opzionale)
+      selector:
+        area:
 
 apply:
   name: Applica sincronizzazione
-  description: Rilegge lo stato e applica le sole modifiche non ambigue.
+  description: Rilegge lo stato e applica le modifiche non ambigue solo se le scritture sono abilitate nelle opzioni.
+  fields:
+    area_id:
+      name: Area (opzionale)
+      selector:
+        area:
 
 cleanup_preview:
   name: Anteprima endpoint Alexa obsoleti
@@ -28,6 +38,40 @@ delete_stale_endpoints:
     confirm:
       name: Conferma
       description: Deve essere true per eseguire la cancellazione permanente su Alexa.
+      required: true
+      selector:
+        boolean:
+sync_area:
+  name: Sincronizza una area
+  description: Sincronizza solo il gruppo dell'area indicata; rispetta anteprima e consenso alle scritture.
+  fields:
+    area_id:
+      name: Area
+      required: true
+      selector:
+        area:
+remove_managed_groups:
+  name: Dismetti i gruppi gestiti
+  description: Dismette solo i gruppi tracciati, conservando i membri manuali. Richiede scritture abilitate, due esecuzioni distanti almeno 15 minuti e rispetta il blocco delle rimozioni massive.
+  fields:
+    confirm:
+      name: Conferma
+      required: true
+      selector:
+        boolean:
+forget_missing_groups:
+  name: Ripristina il tracciamento dei gruppi mancanti
+  description: Dimentica solo i record selezionati il cui ID e nome non esistono più su Alexa, dopo una nuova lettura. Non modifica Alexa. Il prossimo sync può ricreare i gruppi necessari.
+  fields:
+    group_keys:
+      name: Chiavi dei record
+      description: Copia i valori key dalle azioni group_actions bloccate nell'anteprima.
+      required: true
+      selector:
+        text:
+          multiple: true
+    confirm:
+      name: Conferma
       required: true
       selector:
         boolean:

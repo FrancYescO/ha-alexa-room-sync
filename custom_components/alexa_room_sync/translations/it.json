@@ -4,7 +4,7 @@
     "step": {
       "user": {
         "title": "Collega una sessione Alexa",
-        "description": "È consigliata l'autenticazione di Alexa Media Player. Il cookie da HAR rimane disponibile come ripiego. Alexa Room Sync usa un'API Alexa privata e non ufficiale.",
+        "description": "Riutilizza la sessione di Alexa Devices o Alexa Media Player, oppure un cookie HAR. Le scritture di sincronizzazione sono disabilitate finché non le abiliti nelle opzioni.",
         "data": {
           "auth_method": "Metodo di autenticazione",
           "alexa_media_entry_id": "Account Alexa Media Player",
@@ -12,7 +12,8 @@
           "cookie": "Header Cookie GraphQL (solo ripiego HAR)",
           "headers_json": "Header app aggiuntivi in JSON (opzionale)",
           "endpoint_models_json": "Modelli endpoint Alexa gestiti (JSON)",
-          "manual_mappings_json": "Mapping entity_id → endpoint Alexa (JSON, opzionale)"
+          "manual_mappings_json": "Mapping entity_id → endpoint Alexa (JSON, opzionale)",
+          "alexa_devices_entry_id": "Account Alexa Devices"
         }
       }
     },
@@ -21,18 +22,69 @@
       "cannot_connect": "Connessione ad Alexa fallita",
       "invalid_auth": "L'autenticazione Alexa non è valida o è scaduta",
       "invalid_host": "Usa un host HTTPS Amazon Alexa supportato",
-      "invalid_json": "Uno dei campi JSON non è valido"
+      "invalid_json": "Uno dei campi JSON non è valido",
+      "alexa_devices_unavailable": "Alexa Devices non è caricato o richiede autenticazione"
     },
     "abort": {
-      "already_configured": "Alexa Room Sync è già configurato"
+      "already_configured": "Alexa Room Sync è già configurato",
+      "reconfigure_successful": "Configurazione aggiornata"
     }
   },
   "entity": {
     "button": {
-      "verify": { "name": "Verifica sincronizzazione" },
-      "sync": { "name": "Sincronizza ora" },
-      "cleanup": { "name": "Verifica endpoint obsoleti" },
-      "delete_stale": { "name": "Elimina endpoint obsoleti" }
+      "verify": {
+        "name": "Verifica sincronizzazione"
+      },
+      "sync": {
+        "name": "Sincronizza ora"
+      },
+      "cleanup": {
+        "name": "Verifica endpoint obsoleti"
+      },
+      "delete_stale": {
+        "name": "Elimina endpoint obsoleti"
+      },
+      "verify_area": {
+        "name": "Un’area: verifica"
+      },
+      "sync_area": {
+        "name": "Un’area: sincronizza"
+      }
+    },
+    "select": {
+      "area": {
+        "name": "Area da sincronizzare"
+      }
+    },
+    "sensor": {
+      "last_result": {
+        "name": "Ultimo risultato"
+      }
+    }
+  },
+  "options": {
+    "step": {
+      "init": {
+        "title": "Impostazioni sincronizzazione",
+        "description": "Disattiva Solo anteprima e conferma le scritture per applicare le modifiche. I gruppi dismessi attendono almeno 15 minuti e conservano i membri aggiunti manualmente. La pulizia degli endpoint obsoleti rimane un’azione separata.",
+        "data": {
+          "dry_run": "Solo anteprima (nessuna scrittura di sincronizzazione)",
+          "allow_writes": "Confermo che la sincronizzazione può creare, rinominare ed eliminare i gruppi Alexa gestiti",
+          "auto_sync": "Sincronizza dopo le modifiche ai registri e ogni ora",
+          "include_echos": "Includi gli Echo nel gruppo della loro area HA",
+          "floor_groups": "Crea un gruppo Alexa per ogni piano HA",
+          "floor_lights_only": "Gruppi piano: solo luci e interruttori",
+          "include_climate": "Includi le entità climate",
+          "include_child_locks": "Includi gli interruttori blocco bambini",
+          "cloud_devices": "Associa anche i dispositivi esposti tramite HA Cloud",
+          "resend_missing": "Chiedi ad HA Cloud di reinviare i dispositivi assenti da almeno 10 minuti",
+          "group_prefix": "Prefisso dei nomi dei gruppi Alexa",
+          "excluded_areas": "Aree da escludere (i gruppi gestiti vengono dismessi)"
+        }
+      }
+    },
+    "error": {
+      "cloud_required": "Abilita prima il supporto HA Cloud"
     }
   }
 }

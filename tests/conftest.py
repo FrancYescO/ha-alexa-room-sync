@@ -2,10 +2,9 @@
 
 from __future__ import annotations
 
-from pathlib import Path
 import sys
+from pathlib import Path
 from types import ModuleType
-
 
 ROOT = Path(__file__).parents[1]
 INTEGRATION = ROOT / "custom_components" / "alexa_room_sync"

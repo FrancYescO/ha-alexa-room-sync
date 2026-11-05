@@ -6,8 +6,8 @@ not a public Amazon API and can change without notice.
 
 from __future__ import annotations
 
-from collections.abc import Awaitable, Callable, Mapping
 import re
+from collections.abc import Awaitable, Callable, Mapping
 from typing import Any
 from urllib.parse import quote
 
@@ -149,7 +149,9 @@ class AlexaRoomApi:
         *,
         session_provider: Callable[[], ClientSession] | None = None,
         cookies_provider: Callable[[], Awaitable[Any]] | None = None,
+        request_provider: Callable[..., Awaitable[Any]] | None = None,
     ) -> None:
+        self._request_provider = request_provider
         self._session = session
         self._session_provider = session_provider
         self._cookies_provider = cookies_provider
@@ -171,17 +173,167 @@ class AlexaRoomApi:
     ) -> AlexaRoomApi:
         """Use Alexa Media Player's live authenticated session."""
 
+        def current_login():
+            return login_obj() if callable(login_obj) else login_obj
+
         async def _cookies() -> Any:
-            return await login_obj.load_cookie()
+            return await current_login().load_cookie()
 
         return cls(
             None,
             host,
             None,
             extra_headers,
-            session_provider=lambda: login_obj.session,
+            session_provider=lambda: current_login().session,
             cookies_provider=_cookies,
         )
+
+    @classmethod
+    def from_alexa_devices(cls, api_provider, host: str, extra_headers=None):
+        """Borrow the core integration's live authenticated HTTP wrapper."""
+
+        async def request(method, path, payload=None):
+            from yarl import URL
+
+            try:
+                api = api_provider()
+                http = api._http_wrapper
+                # GraphQL needs the regional app host; Phoenix uses the website.
+                base = (
+                    host
+                    if path.startswith("/nexus/")
+                    else api._session_state_data.alexa_website_url
+                )
+                headers = {
+                    "User-Agent": "AmazonWebView/AmazonAlexa/2.2.663733.0/iOS/18.5/iPhone",
+                    **(extra_headers or {}),
+                }
+                _, response = await http.session_request(
+                    method,
+                    URL(base).join(URL(path)),
+                    input_data=payload,
+                    json_data=payload is not None,
+                    extended_headers=headers,
+                )
+                if response.status in (401, 403):
+                    raise AlexaAuthError("Alexa Devices richiede autenticazione")
+                if response.status >= 400:
+                    raise AlexaApiError(f"Alexa HTTP {response.status}")
+                if method == "DELETE":
+                    return {}
+                try:
+                    result = await http.response_to_json(
+                        response, "", content_type=None
+                    )
+                except (ValueError, TypeError):
+                    if method == "GET" or path.startswith("/nexus/"):
+                        raise AlexaApiError("Risposta Alexa non valida")
+                    return {}
+                if isinstance(result, dict) and list(result) == [
+                    "generatedArrayWrapper"
+                ]:
+                    return result["generatedArrayWrapper"]
+                return result
+            except AlexaApiError:
+                raise
+            except Exception as err:
+                raise AlexaApiError("Sessione Alexa Devices non disponibile") from err
+
+        return cls(None, host, None, extra_headers, request_provider=request)
+
+    async def _request(self, method: str, path: str, payload=None):
+        if self._request_provider:
+            return await self._request_provider(method, path, payload)
+        session = self._session_provider() if self._session_provider else self._session
+        if session is None or session.closed:
+            raise AlexaAuthError("La sessione Alexa non è disponibile")
+        cookies = await self._cookies_provider() if self._cookies_provider else None
+        headers = dict(self._headers)
+        csrf = _csrf_cookie(cookies)
+        if not csrf:
+            from http.cookies import SimpleCookie
+
+            captured = SimpleCookie()
+            captured.load(headers.get("Cookie", ""))
+            csrf = _csrf_cookie(captured)
+        if csrf:
+            headers["csrf"] = csrf
+        url = self._url.rsplit("/nexus/v1/graphql", 1)[0] + path
+        try:
+            call = getattr(session, method.lower())
+            kwargs = {"headers": headers, "cookies": cookies, "timeout": 30}
+            if payload is not None:
+                kwargs["json"] = payload
+            async with call(url, **kwargs) as response:
+                if response.status in (401, 403):
+                    raise AlexaAuthError("La sessione Amazon/Alexa è scaduta")
+                response.raise_for_status()
+                if method == "DELETE":
+                    return {}
+                try:
+                    return await response.json(content_type=None)
+                except ValueError:
+                    if method == "GET" or path.startswith("/nexus/"):
+                        raise
+                    return {}
+        except AlexaApiError:
+            raise
+        except (ClientError, TimeoutError, ValueError) as err:
+            raise AlexaApiError(
+                f"Richiesta Alexa fallita: {type(err).__name__}"
+            ) from err
+
+    async def _phoenix_group(self, group: AlexaGroup, endpoints: list[AlexaEndpoint]):
+        """Bridge GraphQL IDs to Phoenix only when identity can be proven."""
+        result = await self._request("GET", "/api/phoenix/group")
+        raw = (
+            result
+            if isinstance(result, list)
+            else result.get("applianceGroups", result.get("groups", []))
+        )
+        matches = [g for g in raw if g.get("name") == group.name]
+        direct = [
+            g
+            for g in raw
+            if str(g.get("groupId") or g.get("id") or g.get("entityId"))
+            == group.group_id
+        ]
+        candidates = direct or matches
+        if len(candidates) != 1:
+            raise AlexaApiError("Identità Phoenix del gruppo non univoca")
+        target = candidates[0]
+        if not direct:
+            ids = {e.endpoint_id: e.appliance_id for e in endpoints if e.appliance_id}
+            if not group.member_ids or not group.member_ids <= ids.keys():
+                raise AlexaApiError("Impossibile provare l'identità del gruppo Phoenix")
+            if {ids[i] for i in group.member_ids} != set(
+                target.get("applianceIds", [])
+            ):
+                raise AlexaApiError("I membri Phoenix e GraphQL non coincidono")
+        group_id = target.get("groupId") or target.get("id") or target.get("entityId")
+        if not group_id:
+            raise AlexaApiError("ID gruppo Phoenix mancante")
+        return str(group_id), target
+
+    async def async_rename_group(self, group: AlexaGroup, name: str, endpoints):
+        group_id, document = await self._phoenix_group(group, endpoints)
+        await self._request(
+            "PUT",
+            f"/api/phoenix/group/{quote(group_id, safe='')}",
+            {**document, "name": name},
+        )
+
+    async def async_delete_group(self, group: AlexaGroup, endpoints):
+        group_id, document = await self._phoenix_group(group, endpoints)
+        ids = {e.endpoint_id: e.appliance_id for e in endpoints if e.appliance_id}
+        if not group.member_ids <= ids.keys() or (
+            {ids[member] for member in group.member_ids}
+            != set(document.get("applianceIds", []))
+        ):
+            raise AlexaApiError(
+                "I membri Phoenix sono cambiati: cancellazione bloccata"
+            )
+        await self._request("DELETE", f"/api/phoenix/group/{quote(group_id, safe='')}")
 
     async def _graphql(
         self, operation_name: str, query: str, variables: dict[str, Any] | None = None
@@ -191,28 +343,7 @@ class AlexaRoomApi:
             "query": query,
             "variables": variables or {},
         }
-        session = self._session_provider() if self._session_provider else self._session
-        if session is None or session.closed:
-            raise AlexaAuthError("La sessione Alexa non è disponibile")
-        cookies = (
-            await self._cookies_provider() if self._cookies_provider else None
-        )
-        try:
-            async with session.post(
-                self._url,
-                json=payload,
-                headers=self._headers,
-                cookies=cookies,
-                timeout=30,
-            ) as response:
-                if response.status in (401, 403):
-                    raise AlexaAuthError("La sessione Amazon/Alexa è scaduta")
-                response.raise_for_status()
-                result: Any = await response.json(content_type=None)
-        except AlexaApiError:
-            raise
-        except (ClientError, TimeoutError, ValueError) as err:
-            raise AlexaApiError(f"Richiesta Alexa fallita: {err}") from err
+        result = await self._request("POST", "/nexus/v1/graphql", payload)
 
         if isinstance(result, list):
             result = result[0] if result else {}
@@ -220,8 +351,7 @@ class AlexaRoomApi:
             raise AlexaApiError("Risposta GraphQL non valida")
         if result.get("errors"):
             messages = "; ".join(
-                str(item.get("message", "Errore GraphQL"))
-                for item in result["errors"]
+                str(item.get("message", "Errore GraphQL")) for item in result["errors"]
             )
             if "auth" in messages.casefold() or "unauthor" in messages.casefold():
                 raise AlexaAuthError(messages)
@@ -233,10 +363,13 @@ class AlexaRoomApi:
 
     async def async_list_endpoints(self) -> list[AlexaEndpoint]:
         """Return enabled Alexa endpoints."""
-        data = await self._graphql(
-            "AlexaRoomSyncEndpoints", LIST_ENDPOINTS_QUERY
-        )
-        raw_items = data.get("endpoints", {}).get("items", [])
+        data = await self._graphql("AlexaRoomSyncEndpoints", LIST_ENDPOINTS_QUERY)
+        container = data.get("endpoints")
+        if not isinstance(container, dict) or not isinstance(
+            container.get("items"), list
+        ):
+            raise AlexaApiError("Inventario endpoint Alexa non valido")
+        raw_items = container["items"]
         endpoints: list[AlexaEndpoint] = []
         for item in raw_items:
             legacy = item.get("legacyAppliance") or {}
@@ -259,8 +392,8 @@ class AlexaRoomApi:
             endpoint_id = item.get("endpointId") or item.get("id")
             if not name or not endpoint_id:
                 continue
-            description_text = (
-                description_value.get("text") or legacy.get("friendlyDescription")
+            description_text = description_value.get("text") or legacy.get(
+                "friendlyDescription"
             )
             serial_text = serial_number_value.get("text")
             description_entity_id = _entity_id_from_description(description_text)
@@ -273,51 +406,37 @@ class AlexaRoomApi:
                     # A Home Assistant description is stronger evidence than
                     # an opaque Alexa serial number. MatterHub endpoints still
                     # fall back to their entity_id-shaped serial.
-                    source_entity_id=description_entity_id or serial_text,
+                    source_entity_id=(
+                        description_entity_id
+                        or entity_id_from_alexa_id(legacy.get("applianceId"))
+                        or serial_text
+                    ),
                     manufacturer=(
-                        manufacturer_value.get("text")
-                        or legacy.get("manufacturerName")
+                        manufacturer_value.get("text") or legacy.get("manufacturerName")
                     ),
                     description=description_text,
                     source_provider=driver_identity.get("namespace"),
                     appliance_id=legacy.get("applianceId"),
+                    serials=(serial_text.upper(),) if serial_text else (),
                 )
             )
         return endpoints
 
     async def async_delete_appliance(self, appliance_id: str) -> None:
         """Delete one legacy Alexa smart-home appliance."""
-        session = self._session_provider() if self._session_provider else self._session
-        if session is None or session.closed:
-            raise AlexaAuthError("La sessione Alexa non è disponibile")
-        cookies = await self._cookies_provider() if self._cookies_provider else None
-        headers = dict(self._headers)
-        csrf = _csrf_cookie(cookies)
-        if csrf:
-            headers["csrf"] = csrf
-        url = f"{self._url.rsplit('/nexus/v1/graphql', 1)[0]}/api/phoenix/appliance/{quote(appliance_id, safe='')}"
-        try:
-            async with session.delete(
-                url, headers=headers, cookies=cookies, timeout=30
-            ) as response:
-                if response.status in (401, 403):
-                    raise AlexaAuthError("La sessione Amazon/Alexa è scaduta")
-                if response.status >= 400:
-                    body = (await response.text())[:300]
-                    raise AlexaApiError(
-                        f"Eliminazione Alexa rifiutata ({response.status}): {body}"
-                    )
-        except AlexaApiError:
-            raise
-        except (ClientError, TimeoutError, ValueError) as err:
-            raise AlexaApiError(f"Eliminazione Alexa fallita: {err}") from err
+        await self._request(
+            "DELETE", f"/api/phoenix/appliance/{quote(appliance_id, safe='')}"
+        )
 
     async def async_list_groups(self) -> list[AlexaGroup]:
         """Return Alexa groups and their direct members."""
-        data = await self._graphql(
-            "listDeviceGroupsDocumentNode", LIST_GROUPS_QUERY
-        )
-        raw_items = data.get("listDeviceGroups", {}).get("deviceGroups", [])
+        data = await self._graphql("listDeviceGroupsDocumentNode", LIST_GROUPS_QUERY)
+        container = data.get("listDeviceGroups")
+        if not isinstance(container, dict) or not isinstance(
+            container.get("deviceGroups"), list
+        ):
+            raise AlexaApiError("Inventario gruppi Alexa non valido")
+        raw_items = container["deviceGroups"]
         groups: list[AlexaGroup] = []
         for item in raw_items:
             friendly_name = item.get("friendlyName") or {}
@@ -365,14 +484,8 @@ class AlexaRoomApi:
 
     async def async_group_capabilities(self) -> dict[str, Any]:
         """Return group-related GraphQL mutations exposed by Alexa."""
-        data = await self._graphql(
-            "AlexaRoomSyncCapabilities", CAPABILITIES_QUERY
-        )
-        fields = (
-            data.get("__schema", {})
-            .get("mutationType", {})
-            .get("fields", [])
-        )
+        data = await self._graphql("AlexaRoomSyncCapabilities", CAPABILITIES_QUERY)
+        fields = data.get("__schema", {}).get("mutationType", {}).get("fields", [])
         return {
             "group_mutations": [
                 item
@@ -405,3 +518,38 @@ def _csrf_cookie(cookies: Any) -> str | None:
     except TypeError:
         return None
     return None
+
+
+# Parsing approach adapted from scyto/ha-alexa-group-sync (MIT), see NOTICE.
+def entity_id_from_alexa_id(value: Any) -> str | None:
+    if not isinstance(value, str):
+        return None
+    match = re.search(r"(?:^|[_:])([a-z][a-z0-9_]*)#([a-z0-9_]+)$", value)
+    if not match:
+        return None
+    domains = {
+        "alarm_control_panel",
+        "binary_sensor",
+        "button",
+        "camera",
+        "climate",
+        "cover",
+        "fan",
+        "humidifier",
+        "input_boolean",
+        "input_button",
+        "input_number",
+        "light",
+        "lock",
+        "media_player",
+        "number",
+        "scene",
+        "script",
+        "sensor",
+        "switch",
+        "vacuum",
+        "valve",
+        "water_heater",
+    }
+    matches = [d for d in domains if match[1] == d or match[1].endswith("_" + d)]
+    return f"{max(matches, key=len)}.{match[2]}" if matches else None

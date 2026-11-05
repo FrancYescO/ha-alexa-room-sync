@@ -4,7 +4,7 @@
     "step": {
       "user": {
         "title": "Connect an Alexa session",
-        "description": "Alexa Media Player authentication is recommended. The HAR cookie method is available as a fallback. Alexa Room Sync uses an unofficial private Alexa API.",
+        "description": "Reuse Alexa Devices or Alexa Media Player authentication, or a captured HAR cookie. Synchronization writes stay disabled until enabled in options.",
         "data": {
           "auth_method": "Authentication method",
           "alexa_media_entry_id": "Alexa Media Player account",
@@ -12,7 +12,8 @@
           "cookie": "GraphQL Cookie header (HAR fallback only)",
           "headers_json": "Additional app headers as JSON (optional)",
           "endpoint_models_json": "Managed Alexa endpoint models (JSON)",
-          "manual_mappings_json": "entity_id → Alexa endpoint mappings (JSON, optional)"
+          "manual_mappings_json": "entity_id → Alexa endpoint mappings (JSON, optional)",
+          "alexa_devices_entry_id": "Alexa Devices account"
         }
       }
     },
@@ -21,18 +22,69 @@
       "cannot_connect": "Could not connect to Alexa",
       "invalid_auth": "The Alexa authentication is invalid or expired",
       "invalid_host": "Use a supported Amazon Alexa HTTPS host",
-      "invalid_json": "One of the JSON fields is invalid"
+      "invalid_json": "One of the JSON fields is invalid",
+      "alexa_devices_unavailable": "Alexa Devices is not loaded or needs authentication"
     },
     "abort": {
-      "already_configured": "Alexa Room Sync is already configured"
+      "already_configured": "Alexa Room Sync is already configured",
+      "reconfigure_successful": "Configuration updated"
     }
   },
   "entity": {
     "button": {
-      "verify": { "name": "Verify synchronization" },
-      "sync": { "name": "Synchronize now" },
-      "cleanup": { "name": "Verify stale endpoints" },
-      "delete_stale": { "name": "Delete stale endpoints" }
+      "verify": {
+        "name": "Verify synchronization"
+      },
+      "sync": {
+        "name": "Synchronize now"
+      },
+      "cleanup": {
+        "name": "Verify stale endpoints"
+      },
+      "delete_stale": {
+        "name": "Delete stale endpoints"
+      },
+      "verify_area": {
+        "name": "One area: preview"
+      },
+      "sync_area": {
+        "name": "One area: synchronize"
+      }
+    },
+    "select": {
+      "area": {
+        "name": "Area to synchronize"
+      }
+    },
+    "sensor": {
+      "last_result": {
+        "name": "Last result"
+      }
+    }
+  },
+  "options": {
+    "step": {
+      "init": {
+        "title": "Synchronization settings",
+        "description": "Turn preview-only off and confirm writes to apply changes. Retired groups wait at least 15 minutes and retain manually added members. Stale-endpoint cleanup remains a separate action.",
+        "data": {
+          "dry_run": "Preview only (no synchronization writes)",
+          "allow_writes": "I understand synchronization can create, rename and delete managed Alexa groups",
+          "auto_sync": "Synchronize automatically after registry changes and hourly",
+          "include_echos": "Include Echo devices in their HA area group",
+          "floor_groups": "Create an Alexa group for each HA floor",
+          "floor_lights_only": "Floor groups: lights and switches only",
+          "include_climate": "Include climate entities",
+          "include_child_locks": "Include child-lock switches",
+          "cloud_devices": "Also match devices exposed through HA Cloud",
+          "resend_missing": "Ask HA Cloud to resend devices still missing after 10 minutes",
+          "group_prefix": "Alexa group name prefix",
+          "excluded_areas": "Areas to skip (managed groups are retired)"
+        }
+      }
+    },
+    "error": {
+      "cloud_required": "Enable HA Cloud matching first"
     }
   }
 }

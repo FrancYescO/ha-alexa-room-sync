@@ -248,3 +248,26 @@ def test_room_audit_reports_echo_in_wrong_exact_room() -> None:
     )
     assert inventory[0]["status"] == "wrong_or_multiple_room"
     assert device_issues[0]["expected_ha_area"] == "Cucina"
+
+
+def test_duplicate_source_identity_is_blocked_without_guessing():
+    endpoints = [
+        AlexaEndpoint("one", "Lamp", source_entity_id="light.k"),
+        AlexaEndpoint("two", "Lamp", source_entity_id="light.k"),
+    ]
+    plan = build_plan(
+        endpoints, [], [HomeAssistantCandidate("light.k", "Lamp", "Kitchen")]
+    )
+    assert plan.pending_additions == []
+    assert plan.ambiguous[0]["reason"] == "duplicate_source_entity"
+
+
+def test_conflicting_manual_mappings_cannot_be_resolved_by_iteration_order():
+    endpoint = AlexaEndpoint("one", "Lamp")
+    candidates = [
+        HomeAssistantCandidate("light.a", "Lamp", "Kitchen"),
+        HomeAssistantCandidate("light.b", "Lamp", "Office"),
+    ]
+    plan = build_plan([endpoint], [], candidates, {"light.a": "one", "light.b": "one"})
+    assert not plan.pending_additions
+    assert plan.ambiguous[0]["reason"] == "conflicting_manual_mappings"

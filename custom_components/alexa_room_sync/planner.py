@@ -45,6 +45,7 @@ class HomeAssistantCandidate:
     entity_id: str
     name: str
     area_name: str
+    area_id: str = ""
 
 
 def normalize_name(value: str) -> str:
@@ -67,6 +68,8 @@ def build_room_audit(
     endpoints: Iterable[AlexaEndpoint],
     groups: Iterable[AlexaGroup],
     candidates: Iterable[HomeAssistantCandidate],
+    group_areas: Mapping[str, str] | None = None,
+    endpoint_areas: Mapping[str, str] | None = None,
 ) -> tuple[
     list[dict[str, Any]],
     list[dict[str, Any]],
@@ -80,9 +83,7 @@ def build_room_audit(
     candidate_areas_by_name: dict[str, set[str]] = defaultdict(set)
     candidate_area_by_entity: dict[str, str] = {}
     for candidate in candidate_list:
-        candidate_areas_by_name[normalize_name(candidate.name)].add(
-            candidate.area_name
-        )
+        candidate_areas_by_name[normalize_name(candidate.name)].add(candidate.area_name)
         candidate_area_by_entity[candidate.entity_id] = candidate.area_name
 
     area_names = sorted({item.area_name for item in candidate_list})
@@ -92,9 +93,9 @@ def build_room_audit(
         areas_by_room_key[normalize_room_key(area_name)].append(area_name)
 
     exact_group_by_area: dict[str, list[AlexaGroup]] = defaultdict(list)
-    group_area_by_id: dict[str, str] = {}
+    group_area_by_id: dict[str, str] = dict(group_areas or {})
     for group in group_list:
-        normalized = normalize_name(group.name)
+        normalized = normalize_name((group_areas or {}).get(group.group_id, group.name))
         if normalized in areas_by_normalized:
             exact_group_by_area[normalized].append(group)
             group_area_by_id[group.group_id] = areas_by_normalized[normalized]
@@ -102,14 +103,14 @@ def build_room_audit(
     safe_aliases = _safe_legacy_group_aliases(group_list, candidate_list)
     for group in group_list:
         alias_area = safe_aliases.get(normalize_name(group.name))
-        if alias_area:
+        if alias_area and group.group_id not in (group_areas or {}):
             group_area_by_id[group.group_id] = alias_area
 
     mismatches: list[dict[str, Any]] = []
     device_issues: list[dict[str, Any]] = []
     for group in sorted(group_list, key=lambda item: normalize_name(item.name)):
         normalized = normalize_name(group.name)
-        if normalized in areas_by_normalized:
+        if normalized in areas_by_normalized or group.group_id in (group_areas or {}):
             continue
 
         suggested_areas = areas_by_room_key.get(normalize_room_key(group.name), [])
@@ -193,7 +194,11 @@ def build_room_audit(
         candidate_areas = set(
             candidate_areas_by_name.get(normalize_name(endpoint.name), set())
         )
-        source_area = candidate_area_by_entity.get(endpoint.source_entity_id or "")
+        source_area = (endpoint_areas or {}).get(
+            endpoint.endpoint_id
+        ) or candidate_area_by_entity.get(endpoint.source_entity_id or "")
+        if (endpoint_areas or {}).get(endpoint.endpoint_id):
+            candidate_areas = {source_area}
         if source_area:
             candidate_areas.add(source_area)
         expected_area = next(iter(candidate_areas)) if len(candidate_areas) == 1 else ""
@@ -302,6 +307,8 @@ def build_plan(
 
     desired_area_by_endpoint: dict[str, str] = {}
 
+    blocked_ids: set[str] = set()
+    manual_areas: dict[str, set[str]] = defaultdict(set)
     for entity_id, endpoint_id in manual_mappings.items():
         candidate = candidates_by_entity.get(entity_id)
         endpoint = endpoints_by_id.get(endpoint_id)
@@ -314,12 +321,43 @@ def build_plan(
                 }
             )
             continue
-        desired_area_by_endpoint[endpoint_id] = candidate.area_name
+        manual_areas[endpoint_id].add(candidate.area_name)
+    for endpoint_id, areas in manual_areas.items():
+        if len(areas) != 1:
+            blocked_ids.add(endpoint_id)
+            plan.ambiguous.append(
+                {
+                    "reason": "conflicting_manual_mappings",
+                    "endpoint_id": endpoint_id,
+                    "candidate_areas": sorted(areas),
+                }
+            )
+        else:
+            desired_area_by_endpoint[endpoint_id] = next(iter(areas))
+    source_endpoints: dict[str, list[str]] = defaultdict(list)
+    for endpoint in endpoint_list:
+        if endpoint.source_entity_id in candidates_by_entity:
+            source_endpoints[endpoint.source_entity_id].append(endpoint.endpoint_id)
+    for entity_id, endpoint_ids in source_endpoints.items():
+        if len(endpoint_ids) > 1:
+            unresolved = set(endpoint_ids) - desired_area_by_endpoint.keys()
+            blocked_ids.update(unresolved)
+            if unresolved:
+                plan.ambiguous.append(
+                    {
+                        "reason": "duplicate_source_entity",
+                        "entity_id": entity_id,
+                        "endpoint_ids": sorted(unresolved),
+                    }
+                )
 
     # MatterHub exposes the originating Home Assistant entity_id as the Alexa
     # endpoint serial number. Prefer this stable identity over display names.
     for endpoint in endpoint_list:
-        if endpoint.endpoint_id in desired_area_by_endpoint:
+        if (
+            endpoint.endpoint_id in desired_area_by_endpoint
+            or endpoint.endpoint_id in blocked_ids
+        ):
             continue
         candidate = candidates_by_entity.get(endpoint.source_entity_id or "")
         if candidate is not None:
@@ -334,8 +372,10 @@ def build_plan(
         if normalized in manually_mapped_names:
             continue
         remaining = [
-            item for item in same_name_endpoints
+            item
+            for item in same_name_endpoints
             if item.endpoint_id not in manually_mapped_ids
+            and item.endpoint_id not in blocked_ids
         ]
         if not remaining:
             continue
@@ -349,9 +389,7 @@ def build_plan(
                 {
                     "reason": "duplicate_name_or_multiple_areas",
                     "alexa_name": remaining[0].name,
-                    "endpoint_ids": sorted(
-                        item.endpoint_id for item in remaining
-                    ),
+                    "endpoint_ids": sorted(item.endpoint_id for item in remaining),
                     "endpoint_count": len(remaining),
                     "candidate_entities": sorted(
                         item.entity_id for item in matching_candidates
@@ -417,9 +455,7 @@ def build_plan(
         # Alexa groups (audio, functional groups, etc.) are never modified.
         # A legacy room name is managed only when removing Italian glue words
         # produces one unique HA area name.
-        managed_groups = {
-            normalize_name(item.area_name) for item in candidate_list
-        }
+        managed_groups = {normalize_name(item.area_name) for item in candidate_list}
         legacy_aliases = _safe_legacy_group_aliases(group_list, candidate_list)
         for group in group_list:
             normalized_group = normalize_name(group.name)

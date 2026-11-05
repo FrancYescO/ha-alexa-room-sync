@@ -15,10 +15,40 @@ def format_preview_notification(result: dict[str, Any]) -> str:
             else f"Trovate **{change_count} modifiche** da applicare."
         )
     ]
+    if change_count == 0 and (
+        result.get("ambiguous")
+        or any(a.get("held") for a in result.get("group_actions", []))
+    ):
+        lines = [
+            "Nessuna modifica applicabile: controlla gli elementi bloccati o in attesa."
+        ]
     sections = (
+        (
+            "Gestione gruppi",
+            [
+                a
+                for a in result.get("group_actions", [])
+                if a.get("held")
+                or a.get("rename")
+                or a["kind"] in ("delete", "release", "blocked")
+            ],
+            _group_action,
+        ),
+        (
+            "Dispositivi HA Cloud non ancora presenti su Alexa",
+            [
+                f"{name} (`{entity_id}`)"
+                for entity_id, name in result.get("missing_in_alexa", {}).items()
+            ],
+            str,
+        ),
         ("Stanze da creare", result.get("groups_to_create", []), _name),
         ("Entità da aggiungere", result.get("additions", []), _operation),
-        ("Aggiunte dopo la creazione stanza", result.get("pending_additions", []), _operation),
+        (
+            "Aggiunte dopo la creazione stanza",
+            result.get("pending_additions", []),
+            _operation,
+        ),
         ("Entità da rimuovere", result.get("removals", []), _operation),
         (
             "Stanze Alexa con nome diverso da Home Assistant",
@@ -45,7 +75,12 @@ def format_preview_notification(result: dict[str, Any]) -> str:
     for title, items, formatter in sections:
         if not items:
             continue
-        lines.extend((f"\n**{title} ({len(items)})**", *[f"- {formatter(item)}" for item in items]))
+        lines.extend(
+            (
+                f"\n**{title} ({len(items)})**",
+                *[f"- {formatter(item)}" for item in items],
+            )
+        )
     return "\n".join(lines)
 
 
@@ -58,7 +93,12 @@ def format_sync_notification(result: dict[str, Any]) -> str:
     if groups:
         lines.extend(("\n**Stanze create**", *[f"- {_name(item)}" for item in groups]))
     if operations:
-        lines.extend(("\n**Membership aggiornate**", *[f"- {_operation(item)}" for item in operations]))
+        lines.extend(
+            (
+                "\n**Operazioni eseguite**",
+                *[f"- {_operation(item)}" for item in operations],
+            )
+        )
     return "\n".join(lines)
 
 
@@ -67,8 +107,10 @@ def format_cleanup_preview_notification(items: list[dict[str, Any]]) -> str:
     if not items:
         return "Non sono stati trovati endpoint Home Assistant obsoleti su Alexa."
     lines = [
-        f"Trovati **{len(items)} endpoint obsoleti**. Controlla l'elenco; il pulsante "
-        "**Elimina endpoint obsoleti** rimane abilitato per questa verifica per 10 minuti."
+        (
+            f"Trovati **{len(items)} endpoint obsoleti**. Controlla l'elenco; il pulsante "
+            "**Elimina endpoint obsoleti** rimane abilitato per questa verifica per 10 minuti."
+        )
     ]
     lines.extend(
         f"- **{item.get('endpoint_name') or 'Endpoint senza nome'}** — "
@@ -104,6 +146,15 @@ def _operation(item: Any) -> str:
         return str(item)
     endpoint = item.get("endpoint_name", "Endpoint")
     group = item.get("group_name", "stanza sconosciuta")
+    operation = item.get("operation", "")
+    labels = {
+        "CREATE": "Gruppo creato",
+        "RENAME": "Gruppo rinominato",
+        "DELETE": "Gruppo eliminato",
+        "RELEASE": "Gruppo rilasciato",
+    }
+    if operation in labels:
+        return f"{labels[operation]}: {group}"
     return f"{endpoint} → {group}"
 
 
@@ -185,3 +236,26 @@ def _alexa_device_room_inventory(item: Any) -> str:
         f"**{item.get('endpoint_name') or 'Dispositivo Alexa'}** — "
         f"Alexa: {rooms}; HA: {expected}; stato: {item.get('status', 'sconosciuto')}"
     )
+
+
+def _group_action(item):
+    labels = {
+        "delete": "Eliminazione",
+        "release": "Rilascio con conservazione dei membri manuali",
+        "blocked": "Operazione bloccata",
+    }
+    label = (
+        "Rinomina" if item.get("rename") else labels.get(item["kind"], "Aggiornamento")
+    )
+    reasons = {
+        "removal_grace_period": "attesa di almeno 15 minuti e di una nuova sincronizzazione",
+        "bulk_removal_guard": "blocco delle rimozioni massive",
+        "ambiguous_mapping": "associazioni ambigue",
+        "managed_group_missing": "gruppo gestito non presente nell'inventario",
+        "duplicate_target_name": "nome di destinazione duplicato",
+        "duplicate_or_claimed_group": "gruppo duplicato o già gestito",
+        "rename_name_collision": "nome di destinazione già utilizzato",
+    }
+    reason = item.get("reason")
+    suffix = f" — {reasons.get(reason, reason)}" if reason else ""
+    return f"{label}: {item['name']}{suffix}"
