@@ -7,7 +7,7 @@ async def async_get_config_entry_diagnostics(hass, entry):
     runtime = entry.runtime_data
     result = runtime.last_result
     return {
-        "version": "0.9.0",
+        "version": "0.9.1",
         "auth_method": entry.data.get("auth_method", "legacy"),
         "options": {
             key: value

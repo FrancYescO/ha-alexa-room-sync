@@ -2,6 +2,14 @@
 
 All notable changes to this project are documented in this file.
 
+## 0.9.1
+
+- Initialize the area selector's options before Home Assistant registers its
+  capabilities, fixing an AttributeError that prevented the selector from being
+  created on startup.
+- Cover capability reads before entity startup and option-cache refresh in the
+  real Home Assistant smoke test.
+
 ## 0.9.0
 
 - Add preview-gated area and whole-house synchronization, persistent area selection,

@@ -161,9 +161,13 @@ async def main():
         assert api.groups["unmanaged"].member_ids == {"manual"}
         entry = SimpleNamespace(entry_id="test", runtime_data=runtime)
         select = AlexaRoomSyncAreaSelect(entry)
+        # EntityPlatform reads capabilities before async_added_to_hass runs.
+        # Access options here to exercise that order (and its cached property).
+        assert select.capability_attributes == {"options": []}
         select.hass = hass
         select.async_write_ha_state = lambda: None
         select._refresh()
+        assert "Office" in select.options
         await select.async_select_option("Office")
         assert runtime.selected_area == office.id
         sensor = AlexaRoomSyncResultSensor(entry)

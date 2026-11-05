@@ -23,6 +23,8 @@ class AlexaRoomSyncAreaSelect(SelectEntity):
     def __init__(self, entry):
         self._entry = entry
         self._areas = {}
+        # HA reads capability_attributes before async_added_to_hass.
+        self._attr_options = []
         self._attr_unique_id = f"{entry.entry_id}_area"
         self._attr_device_info = DeviceInfo(identifiers={(DOMAIN, entry.entry_id)})
 
