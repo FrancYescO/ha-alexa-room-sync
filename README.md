@@ -254,6 +254,11 @@ membership updates serially. It emits `alexa_room_sync_finished` when done.
 | Group prefix | Empty | Applies to area and floor names. |
 | Areas to skip | Empty | Excludes areas from whole-house and floor sync; retires their tracked groups. |
 
+All synchronization options are optional. Leave the group prefix and area
+exclusions empty to use the HA area names and include all eligible areas. Clear
+an existing value to remove it. Additional headers and manual endpoint mappings
+are also optional and can be cleared in **Reconfigure**.
+
 HA Cloud matching is optional: MatterHub installations do not need HA Cloud.
 A failure to read Cloud exposure settings blocks synchronization instead of
 interpreting the failure as an empty inventory.

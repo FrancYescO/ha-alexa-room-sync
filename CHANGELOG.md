@@ -2,6 +2,18 @@
 
 All notable changes to this project are documented in this file.
 
+## 0.9.3
+
+- Make the group name prefix, excluded areas and synchronization switches optional
+  in the options form, retaining their defaults and existing switch settings.
+- Allow an existing prefix, area exclusion list, extra headers or manual endpoint
+  mappings to be cleared without restoring their previous values.
+- Make authentication account selectors optional while validating the selected
+  authentication method; replace stale account defaults with available accounts.
+- Cover omitted, blank and populated optional fields in new configurations and
+  reconfiguration, plus options clearing and write-gate defaults, with real Home
+  Assistant smoke tests.
+
 ## 0.9.2
 
 - Load only the selected authentication provider during entry setup. A failed

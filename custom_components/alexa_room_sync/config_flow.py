@@ -78,6 +78,14 @@ class AlexaRoomSyncConfigFlow(config_entries.ConfigFlow, domain=DOMAIN):
         """Configure and validate a captured Alexa session."""
         errors: dict[str, str] = {}
         reconfigure = self.context.get("source") == "reconfigure"
+        if user_input is not None:
+            # An omitted optional field was cleared in the form. Do not restore
+            # its previous value when merging reconfiguration data.
+            user_input = {
+                CONF_HEADERS_JSON: "{}",
+                CONF_MANUAL_MAPPINGS_JSON: "{}",
+                **user_input,
+            }
         if reconfigure and user_input is not None:
             user_input = {**self._get_reconfigure_entry().data, **user_input}
         accounts = alexa_media_accounts(self.hass)
@@ -87,7 +95,7 @@ class AlexaRoomSyncConfigFlow(config_entries.ConfigFlow, domain=DOMAIN):
                 if not _valid_host(user_input[CONF_HOST]):
                     errors[CONF_HOST] = "invalid_host"
                 headers = _parse_headers(user_input[CONF_HEADERS_JSON])
-                parse_string_mapping(user_input[CONF_MANUAL_MAPPINGS_JSON])
+                mappings = parse_string_mapping(user_input[CONF_MANUAL_MAPPINGS_JSON])
                 parse_string_list(user_input[CONF_ENDPOINT_MODELS_JSON])
             except (json.JSONDecodeError, ValueError):
                 errors["base"] = "invalid_json"
@@ -139,6 +147,7 @@ class AlexaRoomSyncConfigFlow(config_entries.ConfigFlow, domain=DOMAIN):
                 else:
                     data = dict(user_input)
                     data[CONF_HEADERS_JSON] = json.dumps(headers)
+                    data[CONF_MANUAL_MAPPINGS_JSON] = json.dumps(mappings)
                     if auth_method == AUTH_ALEXA_DEVICES:
                         data.pop(CONF_COOKIE, None)
                     if auth_method == AUTH_ALEXA_MEDIA:
@@ -192,22 +201,22 @@ class AlexaRoomSyncConfigFlow(config_entries.ConfigFlow, domain=DOMAIN):
                 default=(user_input or {}).get(CONF_AUTH_METHOD, default_auth),
             ): vol.In(auth_options),
         }
+        media_id = (user_input or {}).get(CONF_ALEXA_MEDIA_ENTRY_ID)
+        devices_id = (user_input or {}).get(CONF_ALEXA_DEVICES_ENTRY_ID)
         if accounts:
             fields[
-                vol.Required(
+                vol.Optional(
                     CONF_ALEXA_MEDIA_ENTRY_ID,
-                    default=(user_input or {}).get(
-                        CONF_ALEXA_MEDIA_ENTRY_ID, next(iter(accounts))
-                    ),
+                    default=media_id if media_id in accounts else next(iter(accounts)),
                 )
             ] = vol.In(accounts)
         if devices_accounts:
             fields[
-                vol.Required(
+                vol.Optional(
                     CONF_ALEXA_DEVICES_ENTRY_ID,
-                    default=(user_input or {}).get(
-                        CONF_ALEXA_DEVICES_ENTRY_ID, next(iter(devices_accounts))
-                    ),
+                    default=devices_id
+                    if devices_id in devices_accounts
+                    else next(iter(devices_accounts)),
                 )
             ] = vol.In(devices_accounts)
         fields.update(
@@ -221,7 +230,11 @@ class AlexaRoomSyncConfigFlow(config_entries.ConfigFlow, domain=DOMAIN):
                 ),
                 vol.Optional(
                     CONF_HEADERS_JSON,
-                    default=(user_input or {}).get(CONF_HEADERS_JSON, "{}"),
+                    description={
+                        "suggested_value": (user_input or {}).get(
+                            CONF_HEADERS_JSON, "{}"
+                        )
+                    },
                 ): TextSelector(TextSelectorConfig(multiline=True)),
                 vol.Required(
                     CONF_ENDPOINT_MODELS_JSON,
@@ -231,7 +244,11 @@ class AlexaRoomSyncConfigFlow(config_entries.ConfigFlow, domain=DOMAIN):
                 ): TextSelector(TextSelectorConfig(multiline=True)),
                 vol.Optional(
                     CONF_MANUAL_MAPPINGS_JSON,
-                    default=(user_input or {}).get(CONF_MANUAL_MAPPINGS_JSON, "{}"),
+                    description={
+                        "suggested_value": (user_input or {}).get(
+                            CONF_MANUAL_MAPPINGS_JSON, "{}"
+                        )
+                    },
                 ): TextSelector(TextSelectorConfig(multiline=True)),
             }
         )
@@ -252,6 +269,7 @@ class AlexaRoomSyncOptionsFlow(config_entries.OptionsFlow):
 
         errors = {}
         if user_input is not None:
+            user_input = {**DEFAULT_OPTIONS, **user_input}
             if user_input.get("resend_missing") and not user_input.get("cloud_devices"):
                 errors["base"] = "cloud_required"
             else:
@@ -264,7 +282,12 @@ class AlexaRoomSyncOptionsFlow(config_entries.OptionsFlow):
                 selector = AreaSelector(AreaSelectorConfig(multiple=True))
             else:
                 selector = bool if isinstance(default, bool) else str
-            fields[vol.Required(name, default=value)] = selector
+            if name in ("group_prefix", "excluded_areas"):
+                fields[vol.Optional(name, description={"suggested_value": value})] = (
+                    selector
+                )
+            else:
+                fields[vol.Optional(name, default=value)] = selector
         return self.async_show_form(
             step_id="init", data_schema=vol.Schema(fields), errors=errors
         )

@@ -16,5 +16,5 @@
   "issue_tracker": "https://github.com/FrancYescO/ha-alexa-room-sync/issues",
   "requirements": [],
   "single_config_entry": true,
-  "version": "0.9.2"
+  "version": "0.9.3"
 }
