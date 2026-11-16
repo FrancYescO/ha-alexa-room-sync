@@ -2,6 +2,16 @@
 
 All notable changes to this project are documented in this file.
 
+## 0.9.2
+
+- Load only the selected authentication provider during entry setup. A failed
+  Alexa Media Player installation no longer blocks Alexa Devices or cookie-based
+  configurations, or access to the reconfiguration flow.
+- Keep normal startup retries when the selected provider is unavailable, with an
+  error explaining how to choose another authentication method.
+- Cover independent provider startup and failure handling in the real Home
+  Assistant smoke test.
+
 ## 0.9.1
 
 - Initialize the area selector's options before Home Assistant registers its

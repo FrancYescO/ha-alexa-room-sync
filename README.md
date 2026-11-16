@@ -81,6 +81,15 @@ Copy `custom_components/alexa_room_sync` into the Home Assistant
 
 ## Authentication
 
+Only the selected authentication provider is started and awaited. Alexa Media
+Player is not required when using Alexa Devices or a manual cookie.
+
+To replace Alexa Media Player with Alexa Devices, first configure the built-in
+Alexa Devices integration, then open Alexa Room Sync's **Reconfigure** menu and
+select **Alexa Devices** and its account. The new session is validated before
+saving. Removing Media Player does not automatically switch authentication or
+migrate automations that use `notify.alexa_media*`.
+
 ### Alexa Devices
 
 The built-in Home Assistant **Alexa Devices** integration is supported. Select

@@ -3,8 +3,6 @@
   "name": "Alexa Room Sync",
   "after_dependencies": [
     "alexa",
-    "alexa_devices",
-    "alexa_media",
     "cloud",
     "logbook"
   ],
@@ -18,5 +16,5 @@
   "issue_tracker": "https://github.com/FrancYescO/ha-alexa-room-sync/issues",
   "requirements": [],
   "single_config_entry": true,
-  "version": "0.9.1"
+  "version": "0.9.2"
 }

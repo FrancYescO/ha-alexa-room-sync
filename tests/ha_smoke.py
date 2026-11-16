@@ -8,23 +8,27 @@ No network calls or real Amazon credentials are used.
 from __future__ import annotations
 
 import asyncio
+import json
 import sys
 import time
 from pathlib import Path
 from tempfile import TemporaryDirectory
 from types import SimpleNamespace
+from unittest.mock import AsyncMock, Mock, patch
 
 sys.path.insert(0, str(Path(__file__).parents[1]))
 
 from homeassistant import loader
-from homeassistant.config_entries import ConfigEntries
+from homeassistant.config_entries import ConfigEntries, ConfigEntryState
 from homeassistant.core import HomeAssistant
+from homeassistant.exceptions import ConfigEntryNotReady
 from homeassistant.helpers import area_registry as ar
 from homeassistant.helpers import device_registry as dr
 from homeassistant.helpers import entity_registry as er
 from homeassistant.helpers import floor_registry as fr
 from homeassistant.helpers.storage import Store
 
+from custom_components import alexa_room_sync as integration
 from custom_components.alexa_room_sync.config_flow import (
     AlexaRoomSyncConfigFlow,
     AlexaRoomSyncOptionsFlow,
@@ -33,6 +37,103 @@ from custom_components.alexa_room_sync.models import AlexaEndpoint, AlexaGroup
 from custom_components.alexa_room_sync.runtime import AlexaRoomSyncRuntime
 from custom_components.alexa_room_sync.select import AlexaRoomSyncAreaSelect
 from custom_components.alexa_room_sync.sensor import AlexaRoomSyncResultSensor
+
+
+async def check_auth_startup(hass):
+    """Exercise entry startup with an unavailable alternative provider."""
+    manifest = json.loads(
+        (Path(integration.__file__).parent / "manifest.json").read_text()
+    )
+    assert not {"alexa_devices", "alexa_media"}.intersection(
+        manifest.get("after_dependencies", []) + manifest.get("dependencies", [])
+    )
+
+    for method, provider_available, session_available in (
+        ("alexa_devices", True, True),
+        ("alexa_media", True, True),
+        ("cookie", True, True),
+        ("alexa_devices", False, False),
+        ("alexa_media", False, False),
+        ("alexa_devices", True, False),
+        ("alexa_media", True, False),
+    ):
+        sources = {
+            domain: SimpleNamespace(
+                entry_id=domain,
+                title=domain,
+                data={"email": "test@example.invalid"},
+                state=ConfigEntryState.NOT_LOADED,
+                runtime_data=None,
+            )
+            for domain in ("alexa_devices", "alexa_media")
+        }
+
+        async def setup_provider(instance, domain, config):
+            assert instance is hass
+            assert domain == method  # Never start an alternative provider.
+            if provider_available and session_available:
+                sources[domain].state = ConfigEntryState.LOADED
+                sources[domain].runtime_data = SimpleNamespace(
+                    api=object(), login_obj=object()
+                )
+            return provider_available
+
+        entry = SimpleNamespace(
+            entry_id="startup-test",
+            data={
+                "auth_method": method,
+                "alexa_devices_entry_id": "alexa_devices",
+                "alexa_media_entry_id": "alexa_media",
+                "host": "https://eu-api-alexa.amazon.it",
+                "endpoint_models_json": '["MatterHub"]',
+                "cookie": "csrf=test",
+            },
+            options={},
+            async_on_unload=Mock(),
+            add_update_listener=Mock(return_value=lambda: None),
+        )
+        with (
+            patch.object(
+                integration, "async_setup_component", side_effect=setup_provider
+            ) as setup,
+            patch.object(integration, "async_get_clientsession", return_value=object()),
+            patch.object(
+                hass.config_entries,
+                "async_entries",
+                side_effect=lambda domain: [sources[domain]],
+            ),
+            patch.object(
+                hass.config_entries, "async_get_entry", side_effect=sources.get
+            ),
+            patch.object(Store, "async_load", new=AsyncMock(return_value={})),
+            patch.object(
+                hass.config_entries, "async_forward_entry_setups", new=AsyncMock()
+            ) as forward,
+            patch.object(
+                hass.config_entries,
+                "async_unload_platforms",
+                new=AsyncMock(return_value=True),
+            ),
+        ):
+            if provider_available and session_available:
+                assert await integration.async_setup_entry(hass, entry)
+                forward.assert_awaited_once()
+                expected_source = None if method == "cookie" else method
+                assert entry.runtime_data.auth_entry_id == expected_source
+                assert hass.services.has_service("alexa_room_sync", "preview")
+                assert await integration.async_unload_entry(hass, entry)
+            else:
+                try:
+                    await integration.async_setup_entry(hass, entry)
+                except ConfigEntryNotReady:
+                    pass
+                else:
+                    raise AssertionError("Unavailable provider must retry setup")
+                forward.assert_not_awaited()
+            if method == "cookie":
+                setup.assert_not_called()
+            else:
+                setup.assert_awaited_once_with(hass, method, {})
 
 
 class SimulatedAlexa:
@@ -85,6 +186,7 @@ async def main():
             dr.async_setup(hass)
         for registry in (fr, ar, dr, er):
             await registry.async_load(hass, load_empty=True)
+        await check_auth_startup(hass)
         floors, areas, entities = (
             fr.async_get(hass),
             ar.async_get(hass),

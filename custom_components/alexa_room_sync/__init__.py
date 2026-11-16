@@ -15,6 +15,7 @@ from homeassistant.exceptions import (
     Unauthorized,
 )
 from homeassistant.helpers.aiohttp_client import async_get_clientsession
+from homeassistant.setup import async_setup_component
 
 from .api import AlexaApiError, AlexaRoomApi
 from .auth import get_alexa_devices_api, get_alexa_media_login
@@ -52,7 +53,20 @@ async def async_setup_entry(
     """Set up Alexa Room Sync from a config entry."""
     extra_headers = json.loads(entry.data.get(CONF_HEADERS_JSON, "{}"))
     auth_method = entry.data.get(CONF_AUTH_METHOD)
-    alexa_media = get_alexa_media_login(hass, entry.data.get(CONF_ALEXA_MEDIA_ENTRY_ID))
+    # Authentication providers are alternatives, not unconditional dependencies.
+    # Wait for the selected provider only, so a broken optional integration cannot
+    # prevent this component (and its reconfiguration flow) from loading.
+    if auth_method in (AUTH_ALEXA_DEVICES, AUTH_ALEXA_MEDIA):
+        if not await async_setup_component(hass, auth_method, {}):
+            raise ConfigEntryNotReady(
+                f"Impossibile caricare {auth_method}; ripristina l'integrazione "
+                "o seleziona un altro metodo di autenticazione in Riconfigura"
+            )
+    alexa_media = (
+        get_alexa_media_login(hass, entry.data.get(CONF_ALEXA_MEDIA_ENTRY_ID))
+        if auth_method in (None, AUTH_ALEXA_MEDIA)
+        else None
+    )
 
     api: AlexaRoomApi
     if auth_method == AUTH_ALEXA_DEVICES:
